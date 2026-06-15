@@ -126,6 +126,7 @@ export function loadKnowledgeSeed() {
   const sources = sourceDocuments.map((document) => publicDocument(document));
   const checks = checkDocuments.map((document) => publicDocument(document));
   const outputs = outputDocuments.map((document) => publicDocument(document));
+  const raw = rawDocuments.map((document) => publicDocument(document));
   const wordCount = [
     metaDocument,
     ...rawDocuments,
@@ -138,11 +139,13 @@ export function loadKnowledgeSeed() {
   return {
     meta: {
       ...publicDocument(metaDocument),
+      rawCount: rawDocuments.length,
       articleCount: articles.length,
       sourceCount: sources.length,
       outputCount: outputs.length,
       wordCount
     },
+    raw,
     articles,
     sources,
     checks,

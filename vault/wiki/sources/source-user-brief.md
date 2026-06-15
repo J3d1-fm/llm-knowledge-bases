@@ -13,6 +13,12 @@ usedBy:
   - agent-cli
   - output-studio
   - interesting-question-engine
+  - llm-owned-wiki
+  - raw-to-compiled-vault
+  - obsidian-as-knowledge-ide
+  - private-authenticated-workspace
+  - output-artifact-contract
+  - synthetic-data-and-finetuning
 ---
 # Original LLM Knowledge Bases Brief
 

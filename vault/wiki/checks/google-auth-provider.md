@@ -2,10 +2,10 @@
 id: check-google-auth-provider
 title: Google Auth provider
 severity: High
-status: Needs verification
+status: Blocked
 scope: Authentication
-finding: The frontend uses Firebase Google sign-in. Provider enablement must be verified in the Firebase project before user testing.
-nextAction: Sign in on the hosted URL with j3d1fm@gmail.com and confirm Firestore reads succeed.
+finding: Firestore and Hosting are configured, but Google sign-in still depends on enabling the Firebase Authentication provider in the console.
+nextAction: Enable Google provider in Firebase Console, then sign in with j3d1fm@gmail.com and confirm workspace reads succeed.
 ---
 # Google Auth provider
 

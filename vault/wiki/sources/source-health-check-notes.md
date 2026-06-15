@@ -8,6 +8,7 @@ usedBy:
   - health-checks
   - source-coverage
   - interesting-question-engine
+  - evaluation-and-health-scoring
 ---
 # Knowledge Integrity Health Check Notes
 

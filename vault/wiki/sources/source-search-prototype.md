@@ -7,6 +7,7 @@ summary: Small search engine idea that can serve both a human web UI and an LLM 
 usedBy:
   - agent-cli
   - query-to-artifact-loop
+  - search-and-retrieval-strategy
 ---
 # Naive Vault Search Prototype
 

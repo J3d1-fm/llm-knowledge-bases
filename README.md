@@ -12,6 +12,17 @@ The project now has a local markdown vault as the source of truth:
 
 Firestore is a deploy target generated from the vault, not the authoring surface.
 
+Current first content batch:
+
+- workflow and Obsidian raw notes
+- example compiled wiki and health-check notes
+- generic market-map notes awaiting source-specific competitor imports
+- RAG vs filesystem wiki notes
+- agent CLI tooling notes
+- output-format notes
+- synthetic-data and finetuning notes
+- Firebase authenticated workspace notes
+
 The page presents a filesystem-first research workflow:
 
 - raw source ingest
@@ -84,4 +95,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.3.0`
+Current version: `v0.4.0`

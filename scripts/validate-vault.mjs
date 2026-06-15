@@ -30,6 +30,14 @@ for (const collectionName of collections) {
 const articleIds = idsFor("articles");
 const sourceIds = idsFor("sources");
 
+for (const rawSource of knowledgeSeed.raw || []) {
+  requireField("raw", rawSource, "id");
+  requireField("raw", rawSource, "title");
+  if (!sourceIds.has(rawSource.id)) {
+    failures.push(`raw/${rawSource.id} has no matching source record`);
+  }
+}
+
 for (const article of knowledgeSeed.articles) {
   for (const field of ["type", "confidence", "summary"]) requireField("articles", article, field);
   if (!Array.isArray(article.body) || article.body.length === 0) {
@@ -78,4 +86,4 @@ if (failures.length > 0) {
   process.exit(1);
 }
 
-console.log(`Vault validation passed for ${knowledgeSeed.articles.length} articles, ${knowledgeSeed.sources.length} sources, ${knowledgeSeed.checks.length} checks, and ${knowledgeSeed.outputs.length} outputs.`);
+console.log(`Vault validation passed for ${knowledgeSeed.raw?.length || 0} raw sources, ${knowledgeSeed.articles.length} articles, ${knowledgeSeed.sources.length} sources, ${knowledgeSeed.checks.length} checks, and ${knowledgeSeed.outputs.length} outputs.`);

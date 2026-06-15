@@ -1,5 +1,15 @@
 LLM Knowledge Bases Changelog
 
+Version v0.4.0 - 2026-06-15
+- Added the first expanded vault content batch with 10 new raw notes.
+- Added 10 new compiled wiki articles covering LLM-owned wiki maintenance, ingestion, Obsidian, market mapping, private workspace, retrieval, outputs, evaluation, and finetuning.
+- Added 10 matching source records for the new raw notes and updated existing source backlinks.
+- Added new health checks for raw source registration and market research gaps.
+- Added the First Vault Expansion Plan output.
+- Added derived rawCount metadata to the Firestore seed snapshot.
+- Added validation requiring every raw file to have a matching source record.
+- Updated README and technical documentation for the expanded content batch.
+
 Version v0.3.0 - 2026-06-15
 - Added vault/ as the filesystem source of truth for knowledge-base content.
 - Added raw, wiki articles, source records, health checks, and output markdown files.
