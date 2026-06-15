@@ -2,6 +2,16 @@
 
 Firebase-hosted landing page and authenticated workspace for the LLM Knowledge Bases product concept.
 
+The project now has a local markdown vault as the source of truth:
+
+- `vault/raw/` stores imported source material
+- `vault/wiki/articles/` stores compiled wiki pages
+- `vault/wiki/sources/` stores source records and coverage links
+- `vault/wiki/checks/` stores integrity checks
+- `vault/outputs/` stores reusable reports, decks, and artifact records
+
+Firestore is a deploy target generated from the vault, not the authoring surface.
+
 The page presents a filesystem-first research workflow:
 
 - raw source ingest
@@ -22,6 +32,7 @@ Run:
 
 ```bash
 node scripts/validate-static.mjs
+node scripts/validate-vault.mjs
 node scripts/build-pages.mjs
 ```
 
@@ -39,6 +50,16 @@ window.LKB_ACCESS_CONFIG = {
 
 Workspace data is stored in Firestore under `vaults/main`. Firestore rules allow read access only when the signed-in Firebase Auth user email is `j3d1fm@gmail.com`.
 
+Current Firestore shape:
+
+```text
+vaults/main
+vaults/main/articles/{articleId}
+vaults/main/sources/{sourceId}
+vaults/main/checks/{checkId}
+vaults/main/outputs/{outputId}
+```
+
 Current setup blocker: Firebase Authentication still needs to be initialized in the Firebase Console and Google sign-in must be enabled for project `llm-knowledge-bases`. CLI/API initialization returned `CONFIGURATION_NOT_FOUND`, and the API init route requires billing-enabled Identity Platform.
 
 Manual console path:
@@ -47,11 +68,13 @@ Manual console path:
 Firebase Console -> llm-knowledge-bases -> Authentication -> Get started -> Sign-in method -> Google -> Enable -> Save
 ```
 
-Seed or refresh the demo vault with:
+Seed or refresh Firestore from the markdown vault with:
 
 ```bash
-node scripts/seed-firestore.mjs
+npm run seed:firestore
 ```
+
+The seed command validates the vault first, clears stale documents from the four managed collections, then writes the current markdown snapshot.
 
 ## Deploy Target
 
@@ -61,4 +84,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.2.0`
+Current version: `v0.3.0`

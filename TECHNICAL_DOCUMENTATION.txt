@@ -1,10 +1,10 @@
 LLM Knowledge Bases Technical Documentation
 
-Version: v0.2.0
+Version: v0.3.0
 Date: 2026-06-15
 
 Purpose
-This repository contains a dependency-free static frontend for presenting the LLM Knowledge Bases product concept and an authenticated workspace backed by Firebase Auth and Firestore.
+This repository contains a dependency-free static frontend for presenting the LLM Knowledge Bases product concept, a local markdown vault used as the knowledge source of truth, and an authenticated workspace backed by Firebase Auth and Firestore.
 
 File Structure
 - index.html: Main static page.
@@ -21,12 +21,64 @@ File Structure
 - scripts/validate-static.mjs: Local validation script for release checks.
 - scripts/build-pages.mjs: Builds the minimal deployable GitHub Pages artifact in dist/.
 - scripts/smoke-app.mjs: Checks app.html/app.js wiring for stale auth/UI references.
-- scripts/knowledge-seed-data.mjs: Demo knowledge snapshot used for Firestore seeding.
-- scripts/seed-firestore.mjs: Writes the demo vault into Firestore via Google OAuth.
+- scripts/load-vault.mjs: Reads markdown/frontmatter from vault/ and builds the structured knowledge snapshot.
+- scripts/knowledge-seed-data.mjs: Exports the structured knowledge snapshot generated from vault/.
+- scripts/validate-vault.mjs: Validates required vault fields, duplicate IDs, source references, and article links.
+- scripts/seed-firestore.mjs: Writes the current vault snapshot into Firestore via Google OAuth and clears stale managed documents.
+- vault/index.md: Vault-level metadata document.
+- vault/raw/: Raw source material imported for compilation.
+- vault/wiki/articles/: Compiled concept and article pages.
+- vault/wiki/sources/: Source records and source coverage metadata.
+- vault/wiki/checks/: Knowledge integrity checks.
+- vault/outputs/: Reusable markdown reports, deck records, and artifact records.
 - .github/workflows/pages.yml: GitHub Pages deployment workflow.
 - README.md: Operator-facing project summary.
 - CHANGELOG.txt: Version history.
 - .gitignore: Excludes local QA, generated work folders, package artifacts, and logs from release tracking.
+
+Vault Authoring Model
+- Edit vault markdown files first.
+- Frontmatter stores structured fields that the app needs.
+- Article bodies are extracted from the markdown body after the H1.
+- Firestore is derived from the vault with npm run seed:firestore.
+- The managed Firestore collections are articles, sources, checks, and outputs under vaults/main.
+- The seed script deletes existing documents in those four collections before writing the current vault snapshot, preventing stale removed pages from staying visible.
+
+Required Article Fields
+- id
+- title
+- type
+- confidence
+- summary
+- tags
+- links
+- sources
+- markdown body paragraphs
+
+Required Source Fields
+- id
+- title
+- kind
+- status
+- summary
+- usedBy
+
+Required Check Fields
+- id
+- title
+- severity
+- status
+- scope
+- finding
+- nextAction
+
+Required Output Fields
+- id
+- title
+- type
+- status
+- path
+- summary
 
 Runtime
 - No application server is required.
@@ -57,8 +109,9 @@ Primary deployment target is Firebase Hosting project llm-knowledge-bases. Build
 Commands:
 node scripts/validate-static.mjs
 node scripts/smoke-app.mjs
+node scripts/validate-vault.mjs
 node scripts/build-pages.mjs
-node scripts/seed-firestore.mjs
+npm run seed:firestore
 firebase deploy --project llm-knowledge-bases --only hosting,firestore:rules
 
 The dist artifact includes:
@@ -71,12 +124,13 @@ The dist artifact includes:
 - assets/
 
 Rollback
-The first releasable state is tagged as v0.1.0 in git. The first deploy-ready state is tagged as v0.1.1. The populated workspace release is intended to be tagged as v0.2.0. A rollback can restore any release tag.
+The first releasable state is tagged as v0.1.0 in git. The first deploy-ready state is tagged as v0.1.1. The populated workspace release is tagged as v0.2.0. The markdown-vault source-of-truth release is intended to be tagged as v0.3.0. A rollback can restore any release tag.
 
 Validation
 Run:
 node scripts/validate-static.mjs
 node scripts/smoke-app.mjs
+node scripts/validate-vault.mjs
 node scripts/build-pages.mjs
 
-The validator checks that required files exist, local asset references resolve, and the page has the expected title and H1. The build script creates the deployable dist/ artifact.
+The static validator checks that required files exist, local asset references resolve, and the page has the expected title and H1. The vault validator checks structured markdown data integrity before seeding Firestore. The build script creates the deployable dist/ artifact.

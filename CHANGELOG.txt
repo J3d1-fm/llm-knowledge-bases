@@ -1,5 +1,14 @@
 LLM Knowledge Bases Changelog
 
+Version v0.3.0 - 2026-06-15
+- Added vault/ as the filesystem source of truth for knowledge-base content.
+- Added raw, wiki articles, source records, health checks, and output markdown files.
+- Replaced the hand-coded seed object with a markdown/frontmatter vault loader.
+- Added vault validation for required fields, duplicate IDs, article links, and source references.
+- Updated Firestore seeding to clear stale managed collection documents before writing the current vault snapshot.
+- Updated package scripts so validate and seed commands include vault validation.
+- Updated README and technical documentation with the vault authoring workflow.
+
 Version v0.2.0 - 2026-06-15
 - Added a populated workspace demo at app.html with compiled articles, sources, health checks, and outputs.
 - Added Firebase Auth Google sign-in wiring for the workspace.

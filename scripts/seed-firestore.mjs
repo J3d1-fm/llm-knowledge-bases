@@ -48,20 +48,61 @@ function toFirestoreDocument(data) {
   };
 }
 
-async function writeDocument(token, path, data) {
+async function requestFirestore(token, path, options = {}) {
   const response = await fetch(`${baseUrl}/${path}`, {
-    method: "PATCH",
+    ...options,
     headers: {
       Authorization: `Bearer ${token}`,
       "Content-Type": "application/json",
-      "x-goog-user-project": projectId
-    },
-    body: JSON.stringify(toFirestoreDocument(data))
+      "x-goog-user-project": projectId,
+      ...options.headers
+    }
   });
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`Failed to write ${path}: ${response.status} ${body}`);
+    throw new Error(`Firestore request failed for ${path}: ${response.status} ${body}`);
+  }
+
+  if (response.status === 204) return null;
+  return response.json();
+}
+
+async function writeDocument(token, path, data) {
+  await requestFirestore(token, path, {
+    method: "PATCH",
+    body: JSON.stringify(toFirestoreDocument(data))
+  });
+}
+
+async function listDocumentPaths(token, path) {
+  const paths = [];
+  let pageToken = "";
+
+  do {
+    const suffix = pageToken ? `${path}?pageToken=${encodeURIComponent(pageToken)}` : path;
+    const body = await requestFirestore(token, suffix);
+    paths.push(...(body.documents || []).map((document) => {
+      return document.name.split("/documents/")[1];
+    }));
+    pageToken = body.nextPageToken || "";
+  } while (pageToken);
+
+  return paths;
+}
+
+async function deleteDocument(token, path) {
+  await requestFirestore(token, path, { method: "DELETE" });
+}
+
+async function replaceCollection(token, collectionName, items) {
+  const collectionPath = `vaults/main/${collectionName}`;
+  const existingPaths = await listDocumentPaths(token, collectionPath);
+  await Promise.all(existingPaths.map((path) => deleteDocument(token, path)));
+
+  for (const item of items) {
+    const { id, ...data } = item;
+    await writeDocument(token, `${collectionPath}/${id}`, data);
   }
 }
 
@@ -70,10 +111,7 @@ async function main() {
   await writeDocument(token, "vaults/main", knowledgeSeed.meta);
 
   for (const collectionName of ["articles", "sources", "checks", "outputs"]) {
-    for (const item of knowledgeSeed[collectionName]) {
-      const { id, ...data } = item;
-      await writeDocument(token, `vaults/main/${collectionName}/${id}`, data);
-    }
+    await replaceCollection(token, collectionName, knowledgeSeed[collectionName]);
   }
 
   console.log(`Seeded Firestore vault in ${projectId}.`);

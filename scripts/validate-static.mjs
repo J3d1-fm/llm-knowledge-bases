@@ -19,7 +19,11 @@ const required = [
   "TECHNICAL_DOCUMENTATION.txt",
   "assets/knowledge-workbench-hero.png",
   "scripts/build-pages.mjs",
+  "scripts/load-vault.mjs",
   "scripts/smoke-app.mjs",
+  "scripts/validate-vault.mjs",
+  "vault/index.md",
+  "vault/raw/original-llm-knowledge-bases-brief.md",
   ".github/workflows/pages.yml"
 ];
 

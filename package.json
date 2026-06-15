@@ -1,12 +1,13 @@
 {
   "name": "llm-knowledge-bases",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "scripts": {
     "build": "node scripts/build-pages.mjs",
-    "deploy:firebase": "node scripts/validate-static.mjs && node scripts/smoke-app.mjs && node scripts/build-pages.mjs && firebase deploy --project llm-knowledge-bases --only hosting,firestore:rules",
-    "seed:firestore": "node scripts/seed-firestore.mjs",
-    "validate": "node scripts/validate-static.mjs && node scripts/smoke-app.mjs"
+    "deploy:firebase": "node scripts/validate-static.mjs && node scripts/smoke-app.mjs && node scripts/validate-vault.mjs && node scripts/build-pages.mjs && firebase deploy --project llm-knowledge-bases --only hosting,firestore:rules",
+    "seed:firestore": "node scripts/validate-vault.mjs && node scripts/seed-firestore.mjs",
+    "validate": "node scripts/validate-static.mjs && node scripts/smoke-app.mjs && node scripts/validate-vault.mjs",
+    "validate:vault": "node scripts/validate-vault.mjs"
   }
 }
