@@ -23,6 +23,29 @@ Current first content batch:
 - synthetic-data and finetuning notes
 - Firebase authenticated workspace notes
 
+## Vault CLI
+
+Use the local CLI when Codex or another agent needs fast access to the knowledge base:
+
+```bash
+npm run kb -- stats
+npm run kb -- search "Obsidian workflow" --limit 5
+npm run kb -- show llm-owned-wiki
+npm run kb -- health
+```
+
+To import a real local markdown/text corpus:
+
+```bash
+npm run kb -- ingest /path/to/source-folder --dry-run
+npm run kb -- ingest /path/to/source-folder
+npm run kb -- register-raw
+npm run validate
+npm run seed:firestore
+```
+
+`vault/inbox/` is available as a staging folder for unsorted exports. Do not commit private or sensitive source documents to the public GitHub repository unless that is explicitly intended.
+
 The page presents a filesystem-first research workflow:
 
 - raw source ingest
@@ -95,4 +118,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.4.0`
+Current version: `v0.5.0`

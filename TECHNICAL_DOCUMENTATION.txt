@@ -1,6 +1,6 @@
 LLM Knowledge Bases Technical Documentation
 
-Version: v0.4.0
+Version: v0.5.0
 Date: 2026-06-15
 
 Purpose
@@ -20,12 +20,14 @@ File Structure
 - assets/knowledge-workbench-hero.png: Generated bitmap hero asset used by the first viewport.
 - scripts/validate-static.mjs: Local validation script for release checks.
 - scripts/build-pages.mjs: Builds the minimal deployable GitHub Pages artifact in dist/.
+- scripts/kb.mjs: Local CLI for vault stats, search, show, health, ingest, and raw-source registration.
 - scripts/smoke-app.mjs: Checks app.html/app.js wiring for stale auth/UI references.
 - scripts/load-vault.mjs: Reads markdown/frontmatter from vault/ and builds the structured knowledge snapshot.
 - scripts/knowledge-seed-data.mjs: Exports the structured knowledge snapshot generated from vault/.
 - scripts/validate-vault.mjs: Validates required vault fields, duplicate IDs, source references, and article links.
 - scripts/seed-firestore.mjs: Writes the current vault snapshot into Firestore via Google OAuth and clears stale managed documents.
 - vault/index.md: Vault-level metadata document.
+- vault/inbox/: Staging folder for unsorted local imports.
 - vault/raw/: Raw source material imported for compilation.
 - vault/wiki/articles/: Compiled concept and article pages.
 - vault/wiki/sources/: Source records and source coverage metadata.
@@ -87,6 +89,18 @@ Required Output Fields
 - path
 - summary
 
+CLI Access
+The local CLI is the preferred agent entrypoint for inspecting the actual vault:
+- npm run kb -- stats
+- npm run kb -- search "query" --limit 10
+- npm run kb -- show <id-or-path>
+- npm run kb -- health
+- npm run kb -- ingest <path> --dry-run
+- npm run kb -- ingest <path>
+- npm run kb -- register-raw
+
+The ingest command imports .md and .txt files into vault/raw with generated frontmatter. register-raw creates missing source records for raw files. After importing a real corpus, run npm run validate before seeding Firestore.
+
 Runtime
 - No application server is required.
 - No frontend package installation is required.
@@ -131,7 +145,7 @@ The dist artifact includes:
 - assets/
 
 Rollback
-The first releasable state is tagged as v0.1.0 in git. The first deploy-ready state is tagged as v0.1.1. The populated workspace release is tagged as v0.2.0. The markdown-vault source-of-truth release is tagged as v0.3.0. The first expanded content batch is intended to be tagged as v0.4.0. A rollback can restore any release tag.
+The first releasable state is tagged as v0.1.0 in git. The first deploy-ready state is tagged as v0.1.1. The populated workspace release is tagged as v0.2.0. The markdown-vault source-of-truth release is tagged as v0.3.0. The first expanded content batch is tagged as v0.4.0. The local vault CLI release is intended to be tagged as v0.5.0. A rollback can restore any release tag.
 
 Validation
 Run:

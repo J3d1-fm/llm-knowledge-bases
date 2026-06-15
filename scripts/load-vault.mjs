@@ -1,9 +1,9 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
-const vaultRoot = join(root, "vault");
+export const vaultRoot = join(root, "vault");
 
 function parseScalar(value) {
   const trimmed = value.trim();
@@ -52,7 +52,7 @@ function parseFrontmatter(frontmatter, filePath) {
   return data;
 }
 
-function parseMarkdownDocument(filePath) {
+export function parseMarkdownDocument(filePath) {
   const content = readFileSync(filePath, "utf8");
   if (!content.startsWith("---\n")) {
     throw new Error(`Missing frontmatter in ${relative(root, filePath)}`);
@@ -81,14 +81,24 @@ function parseMarkdownDocument(filePath) {
   };
 }
 
-function listMarkdownDocuments(directory) {
+function walkMarkdownFiles(directory) {
+  if (!existsSync(directory)) return [];
+  return readdirSync(directory)
+    .sort()
+    .flatMap((file) => {
+      const fullPath = join(directory, file);
+      const stats = statSync(fullPath);
+      if (stats.isDirectory()) return walkMarkdownFiles(fullPath);
+      if (file.endsWith(".md") && file !== "index.md") return [fullPath];
+      return [];
+    });
+}
+
+export function listMarkdownDocuments(directory) {
   const fullDir = join(vaultRoot, directory);
   if (!existsSync(fullDir)) return [];
 
-  return readdirSync(fullDir)
-    .filter((file) => file.endsWith(".md") && file !== "index.md")
-    .sort()
-    .map((file) => parseMarkdownDocument(join(fullDir, file)));
+  return walkMarkdownFiles(fullDir).map((file) => parseMarkdownDocument(file));
 }
 
 function articleBody(markdown) {
@@ -112,13 +122,27 @@ function publicDocument(document, extra = {}) {
   };
 }
 
-export function loadKnowledgeSeed() {
+export function loadVaultDocuments() {
   const metaDocument = parseMarkdownDocument(join(vaultRoot, "index.md"));
-  const rawDocuments = listMarkdownDocuments("raw");
-  const articleDocuments = listMarkdownDocuments("wiki/articles");
-  const sourceDocuments = listMarkdownDocuments("wiki/sources");
-  const checkDocuments = listMarkdownDocuments("wiki/checks");
-  const outputDocuments = listMarkdownDocuments("outputs");
+  return {
+    metaDocument,
+    rawDocuments: listMarkdownDocuments("raw"),
+    articleDocuments: listMarkdownDocuments("wiki/articles"),
+    sourceDocuments: listMarkdownDocuments("wiki/sources"),
+    checkDocuments: listMarkdownDocuments("wiki/checks"),
+    outputDocuments: listMarkdownDocuments("outputs")
+  };
+}
+
+export function loadKnowledgeSeed() {
+  const {
+    metaDocument,
+    rawDocuments,
+    articleDocuments,
+    sourceDocuments,
+    checkDocuments,
+    outputDocuments
+  } = loadVaultDocuments();
 
   const articles = articleDocuments.map((document) => publicDocument(document, {
     body: articleBody(document.markdown)

@@ -19,6 +19,7 @@ const required = [
   "TECHNICAL_DOCUMENTATION.txt",
   "assets/knowledge-workbench-hero.png",
   "scripts/build-pages.mjs",
+  "scripts/kb.mjs",
   "scripts/load-vault.mjs",
   "scripts/smoke-app.mjs",
   "scripts/validate-vault.mjs",

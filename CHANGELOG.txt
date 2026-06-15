@@ -1,5 +1,12 @@
 LLM Knowledge Bases Changelog
 
+Version v0.5.0 - 2026-06-15
+- Added a local vault CLI for stats, search, show, health, ingest, and raw-source registration.
+- Added recursive vault markdown loading so imported corpora can be grouped in subfolders.
+- Added vault/inbox as a staging folder for unsorted local source exports.
+- Added package scripts for kb, kb:stats, and kb:health.
+- Updated README and technical documentation with the real-base import and CLI access workflow.
+
 Version v0.4.0 - 2026-06-15
 - Added the first expanded vault content batch with 10 new raw notes.
 - Added 10 new compiled wiki articles covering LLM-owned wiki maintenance, ingestion, Obsidian, market mapping, private workspace, retrieval, outputs, evaluation, and finetuning.
