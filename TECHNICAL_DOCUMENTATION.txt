@@ -1,0 +1,35 @@
+LLM Knowledge Bases Technical Documentation
+
+Version: v0.1.0
+Date: 2026-06-15
+
+Purpose
+This repository contains a dependency-free static website for presenting the LLM Knowledge Bases product concept.
+
+File Structure
+- index.html: Main static page.
+- styles.css: Responsive styling and visual system.
+- script.js: Lightweight header state behavior.
+- assets/knowledge-workbench-hero.png: Generated bitmap hero asset used by the first viewport.
+- scripts/validate-static.mjs: Local validation script for release checks.
+- .github/workflows/pages.yml: GitHub Pages deployment workflow.
+- README.md: Operator-facing project summary.
+- CHANGELOG.txt: Version history.
+- .gitignore: Excludes local QA, generated work folders, package artifacts, and logs from release tracking.
+
+Runtime
+- No application server is required.
+- No frontend package installation is required.
+- The site can be opened directly from index.html or served by any static host.
+
+Deployment
+The prepared deployment target is GitHub Pages. The workflow uploads the repository root as a static artifact and deploys it through GitHub Pages when changes are pushed to the main branch.
+
+Rollback
+The first releasable state is intended to be tagged as v0.1.0 in git. A rollback can restore that tag or any later release tag.
+
+Validation
+Run:
+node scripts/validate-static.mjs
+
+The validator checks that required files exist, local asset references resolve, and the page has the expected title and H1.

@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="LLM Knowledge Bases turns raw research into a maintained markdown wiki, agent Q&A, health checks, and Obsidian-ready outputs.">
+    <meta name="theme-color" content="#0f191a">
+    <title>LLM Knowledge Bases</title>
+    <link rel="preload" href="assets/knowledge-workbench-hero.png" as="image">
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header" aria-label="Primary">
+      <a class="brand" href="#top" aria-label="LLM Knowledge Bases home">
+        <span class="brand-mark" aria-hidden="true">KB</span>
+        <span>LLM Knowledge Bases</span>
+      </a>
+      <nav class="nav-links" aria-label="Sections">
+        <a href="#workflow">Workflow</a>
+        <a href="#system">System</a>
+        <a href="#checks">Checks</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero" id="top">
+        <div class="hero-shade" aria-hidden="true"></div>
+        <div class="hero-content">
+          <p class="eyebrow">LLM-native research workspace</p>
+          <h1>LLM Knowledge Bases</h1>
+          <p class="hero-copy">
+            Turn raw sources into a living markdown wiki that an agent can compile,
+            query, lint, visualize, and file back into your research system.
+          </p>
+          <div class="hero-actions" aria-label="Primary actions">
+            <a class="button primary" href="#workflow">See workflow</a>
+            <a class="button secondary" href="#system">View product shape</a>
+          </div>
+          <dl class="hero-metrics" aria-label="Product signals">
+            <div>
+              <dt>Source of truth</dt>
+              <dd>Markdown files</dd>
+            </div>
+            <div>
+              <dt>Frontend</dt>
+              <dd>Obsidian</dd>
+            </div>
+            <div>
+              <dt>Operator</dt>
+              <dd>LLM agent</dd>
+            </div>
+          </dl>
+        </div>
+      </section>
+
+      <section class="workflow-band" id="workflow">
+        <div class="section-inner">
+          <div class="section-heading">
+            <p class="eyebrow">Core loop</p>
+            <h2>Every research pass improves the base.</h2>
+          </div>
+          <div class="workflow-grid">
+            <article class="workflow-card">
+              <span class="step">01</span>
+              <h3>Ingest</h3>
+              <p>Articles, papers, repos, datasets, images, and clips land in <code>raw/</code> with their local assets intact.</p>
+            </article>
+            <article class="workflow-card">
+              <span class="step">02</span>
+              <h3>Compile</h3>
+              <p>The agent maintains <code>wiki/</code>: summaries, concept pages, backlinks, taxonomies, and index files.</p>
+            </article>
+            <article class="workflow-card">
+              <span class="step">03</span>
+              <h3>Query</h3>
+              <p>Questions trigger focused reading, synthesis, citations, and Obsidian-ready markdown or slide output.</p>
+            </article>
+            <article class="workflow-card">
+              <span class="step">04</span>
+              <h3>File Back</h3>
+              <p>Useful answers become durable wiki material instead of disappearing into a chat transcript.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="system-band" id="system">
+        <div class="section-inner split-layout">
+          <div>
+            <p class="eyebrow">Product shape</p>
+            <h2>A compiler for personal research knowledge.</h2>
+            <p class="section-copy">
+              The product is not a replacement for Obsidian. It is an agent layer
+              that treats the local filesystem as the durable source of truth and
+              keeps the knowledge base coherent over time.
+            </p>
+          </div>
+
+          <div class="module-grid" aria-label="Product modules">
+            <article class="module-card">
+              <h3>Vault Scanner</h3>
+              <p>Tracks raw sources, derived pages, backlinks, stale files, and missing summaries.</p>
+            </article>
+            <article class="module-card">
+              <h3>Wiki Compiler</h3>
+              <p>Creates concept pages, refreshes indexes, and keeps article relationships explicit.</p>
+            </article>
+            <article class="module-card">
+              <h3>Agent CLI</h3>
+              <p>Lets the LLM search, inspect, render, and write outputs as repeatable commands.</p>
+            </article>
+            <article class="module-card">
+              <h3>Output Studio</h3>
+              <p>Exports reports, Marp decks, graphs, matrices, and visual research artifacts.</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="checks-band" id="checks">
+        <div class="section-inner checks-layout">
+          <div class="section-heading">
+            <p class="eyebrow">Integrity layer</p>
+            <h2>Health checks keep the wiki trustworthy.</h2>
+          </div>
+          <div class="checks-panel">
+            <div class="check-row">
+              <span class="status ok" aria-label="Complete"></span>
+              <div>
+                <h3>Contradiction scan</h3>
+                <p>Finds claims that disagree across sources and marks the page that needs review.</p>
+              </div>
+            </div>
+            <div class="check-row">
+              <span class="status warn" aria-label="Needs attention"></span>
+              <div>
+                <h3>Missing evidence</h3>
+                <p>Flags articles with weak citations, empty backlinks, or summaries without source coverage.</p>
+              </div>
+            </div>
+            <div class="check-row">
+              <span class="status ok" aria-label="Complete"></span>
+              <div>
+                <h3>New article candidates</h3>
+                <p>Suggests concepts that appear often enough to deserve their own durable page.</p>
+              </div>
+            </div>
+            <div class="check-row">
+              <span class="status info" aria-label="Informational"></span>
+              <div>
+                <h3>Output filing</h3>
+                <p>Tracks which answers, charts, and slides should be promoted back into the wiki.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>LLM Knowledge Bases</span>
+      <span>Filesystem-first. Agent-maintained. Obsidian-ready.</span>
+    </footer>
+
+    <script src="script.js" defer></script>
+  </body>
+</html>

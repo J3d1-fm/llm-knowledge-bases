@@ -1,0 +1,9 @@
+LLM Knowledge Bases Changelog
+
+Version v0.1.0 - 2026-06-15
+- Created the first static landing page for the LLM Knowledge Bases concept.
+- Added a generated local hero image asset for the first viewport.
+- Added responsive CSS for desktop, tablet, and mobile layouts.
+- Added GitHub Pages workflow scaffolding for external deployment.
+- Added a static validation script for local release checks.
+- Excluded local work and output folders from git tracking.
