@@ -46,6 +46,21 @@ npm run seed:firestore
 
 `vault/inbox/` is available as a staging folder for unsorted exports. Do not commit private or sensitive source documents to the public GitHub repository unless that is explicitly intended.
 
+## Global Work DB
+
+The global work database is private/local and generated under `outputs/global-work-kb/`, which is ignored by git.
+
+```bash
+npm run workdb -- refresh-external
+npm run workdb -- build
+npm run workdb -- stats
+npm run workdb -- search "Drive Zone"
+npm run workdb -- project "Piano"
+npm run workdb -- tags --limit 40
+```
+
+The generator indexes local Codex Projects, Codex daily workspaces, Codex memory files, Codex skills, Claude files, local git remotes, Codex session index, and optional GitHub/GCloud/Firebase inventory. Secret-looking files are indexed by metadata only and marked sensitive.
+
 The page presents a filesystem-first research workflow:
 
 - raw source ingest

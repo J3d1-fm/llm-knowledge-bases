@@ -23,6 +23,7 @@ const required = [
   "scripts/load-vault.mjs",
   "scripts/smoke-app.mjs",
   "scripts/validate-vault.mjs",
+  "scripts/workdb.mjs",
   "vault/index.md",
   "vault/raw/original-llm-knowledge-bases-brief.md",
   ".github/workflows/pages.yml"
