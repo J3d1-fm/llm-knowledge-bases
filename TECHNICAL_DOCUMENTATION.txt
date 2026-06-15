@@ -1,6 +1,6 @@
 LLM Knowledge Bases Technical Documentation
 
-Version: v0.6.1
+Version: v0.7.0
 Date: 2026-06-15
 
 Purpose
@@ -109,8 +109,14 @@ The global work database is generated under outputs/global-work-kb and is intent
 - projects.jsonl: local project cards with git remotes when available.
 - sessions.jsonl: Codex and Claude session/task metadata.
 - external-inventory.json: optional GitHub, GCloud, and Firebase inventory.
-- tag-cloud.html: visual cloud of project/work tags.
+- raw-registry.jsonl: generated raw diary/index snapshot with extracted metadata, safety flags, tags, and compile status.
+- chronology.jsonl: generated chronological index across local files, Codex sessions, and Claude session/task files.
+- catalog.md: inferred master catalog of current work clusters and CLI entry points.
+- provenance.md: provenance policy for extracted, inferred, and ambiguous claims.
+- tag-cloud.html: Obsidian/Hermes-style interactive memory graph with the agent memory lens, projects, raw samples, sessions, tags, repos, and cloud resources.
 - README.md: generated summary.
+
+The raw source files are the diary-style layer. The raw registry and chronology are rebuildable generated indexes over that layer, not append-only audit logs. The catalog is the living interpretation layer and marks project/theme grouping as inferred. The graph is an operator view over those indexes, not the source of truth.
 
 Commands:
 npm run workdb -- refresh-external
@@ -126,6 +132,8 @@ Safety rules:
 - Snippets redact API-key-like values, token-like fields, and email addresses before writing files.jsonl.
 - Generated dependency/build folders such as node_modules, .git, dist, build, coverage, .firebase, cache, worktrees, and DerivedData are skipped.
 - outputs/global-work-kb is the private deliverable; the public repository should contain only the generator code and documentation.
+- raw-registry.jsonl and chronology.jsonl may include private paths and file titles, so keep them local/private with the rest of outputs/global-work-kb.
+- Git remotes are redacted for URL userinfo/token patterns before they are written into project, catalog, or graph outputs.
 
 Runtime
 - No application server is required.
@@ -171,7 +179,7 @@ The dist artifact includes:
 - assets/
 
 Rollback
-The first releasable state is tagged as v0.1.0 in git. The first deploy-ready state is tagged as v0.1.1. The populated workspace release is tagged as v0.2.0. The markdown-vault source-of-truth release is tagged as v0.3.0. The first expanded content batch is tagged as v0.4.0. The local vault CLI release is tagged as v0.5.0. The private global work DB generator release is tagged as v0.6.0. The work DB safety patch is intended to be tagged as v0.6.1. A rollback can restore any release tag.
+The first releasable state is tagged as v0.1.0 in git. The first deploy-ready state is tagged as v0.1.1. The populated workspace release is tagged as v0.2.0. The markdown-vault source-of-truth release is tagged as v0.3.0. The first expanded content batch is tagged as v0.4.0. The local vault CLI release is tagged as v0.5.0. The private global work DB generator release is tagged as v0.6.0. The work DB safety patch is tagged as v0.6.1. The Hermes-style memory graph and raw/wiki/provenance outputs are intended to be tagged as v0.7.0. A rollback can restore any release tag.
 
 Validation
 Run:

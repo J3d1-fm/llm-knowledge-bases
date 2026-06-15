@@ -1,5 +1,12 @@
 LLM Knowledge Bases Changelog
 
+Version v0.7.0 - 2026-06-15
+- Replaced the indirect tag cloud with an Obsidian/Hermes-style interactive memory graph centered on an agent memory lens.
+- Added graph nodes for projects, raw file samples, recent agent sessions, semantic tags, GitHub repos, GCloud projects, and Firebase projects.
+- Added generated raw-registry.jsonl, chronology.jsonl, catalog.md, and provenance.md outputs for a raw/wiki/provenance workflow.
+- Added stable hashed IDs for file, project, and session records, metadata-only compile statuses, chronology safety fields, and redacted credential-style git remotes.
+- Updated global work DB docs and version metadata for the memory-graph release.
+
 Version v0.6.1 - 2026-06-15
 - Tightened global work DB snippet indexing to avoid reading JSON/YAML/TOML/config-like files and noisy cache/worktree folders.
 - Added snippet redaction for API-key-like values, token-like fields, and emails.

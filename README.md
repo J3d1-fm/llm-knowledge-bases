@@ -61,6 +61,20 @@ npm run workdb -- tags --limit 40
 
 The generator indexes local Codex Projects, Codex daily workspaces, Codex memory files, Codex skills, Claude files, local git remotes, Codex session index, and optional GitHub/GCloud/Firebase inventory. Secret-looking files are indexed by metadata only and marked sensitive.
 
+Generated private outputs include:
+
+- `db.json` for aggregate counts, projects, sessions, external inventory, and tags
+- `files.jsonl` for file-level metadata and safe snippets
+- `projects.jsonl` for project cards and local git remotes
+- `sessions.jsonl` for Codex and Claude session/task metadata
+- `raw-registry.jsonl` for the generated raw diary/index snapshot
+- `chronology.jsonl` for the cross-source chronological work log
+- `catalog.md` for the inferred master catalog of current work clusters
+- `provenance.md` for `extracted`, `inferred`, and `ambiguous` rules
+- `tag-cloud.html` for the interactive Obsidian/Hermes-style memory graph
+
+Raw source files are the diary layer. The generated registry and chronology are rebuildable indexes over that layer, not append-only audit logs.
+
 The page presents a filesystem-first research workflow:
 
 - raw source ingest
@@ -133,4 +147,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.6.1`
+Current version: `v0.7.0`
