@@ -1,12 +1,16 @@
 LLM Knowledge Bases Changelog
 
+Version v0.6.1 - 2026-06-15
+- Tightened global work DB snippet indexing to avoid reading JSON/YAML/TOML/config-like files and noisy cache/worktree folders.
+- Added snippet redaction for API-key-like values, token-like fields, and emails.
+- Updated version metadata and technical documentation for the work DB safety patch.
+
 Version v0.6.0 - 2026-06-15
 - Added a private global work database generator and CLI.
 - Added indexing for local Codex Projects, Codex daily workspaces, Codex memory files, Codex skills, Claude files, local git remotes, Codex session index, and Claude session/task metadata.
 - Added optional GitHub, GCloud, and Firebase external inventory refresh.
 - Added generated private outputs: db.json, files.jsonl, projects.jsonl, sessions.jsonl, tag-cloud.html, and summary README.
 - Added safety rules that skip generated dependency/build folders and avoid reading secret-looking file contents.
-- Tightened snippet indexing to avoid reading JSON/YAML/TOML/config-like files and noisy cache/worktree folders.
 - Updated documentation with global work database commands and privacy boundaries.
 
 Version v0.5.0 - 2026-06-15

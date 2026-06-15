@@ -165,13 +165,21 @@ function titleFromText(filePath, text) {
   return basename(filePath, extname(filePath)).replace(/[-_]+/g, " ");
 }
 
-function snippetFromText(text) {
+function redactSensitiveText(text) {
   return text
+    .replace(/AIza[0-9A-Za-z_-]{20,}/g, "[REDACTED_API_KEY]")
+    .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "[REDACTED_EMAIL]")
+    .replace(/(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret)(["'\s:=]+)([^"',\s]+)/gi, "$1$2[REDACTED]");
+}
+
+function snippetFromText(text) {
+  const snippet = text
     .replace(/^---[\s\S]*?---\s*/, "")
     .split(/\n\s*\n/)
     .map((part) => part.replace(/\s+/g, " ").trim())
     .find((part) => part && !part.startsWith("#"))
     ?.slice(0, 280) || "";
+  return redactSensitiveText(snippet);
 }
 
 function deriveTags(filePath, text = "") {

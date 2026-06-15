@@ -1,6 +1,6 @@
 LLM Knowledge Bases Technical Documentation
 
-Version: v0.5.0
+Version: v0.6.1
 Date: 2026-06-15
 
 Purpose
@@ -123,6 +123,7 @@ npm run workdb -- tags --limit 40
 Safety rules:
 - Secret-looking files are indexed by path, size, mtime, and sensitive flag only.
 - JSON/YAML/TOML/config-like files are indexed by metadata only, not snippet text.
+- Snippets redact API-key-like values, token-like fields, and email addresses before writing files.jsonl.
 - Generated dependency/build folders such as node_modules, .git, dist, build, coverage, .firebase, cache, worktrees, and DerivedData are skipped.
 - outputs/global-work-kb is the private deliverable; the public repository should contain only the generator code and documentation.
 
@@ -170,7 +171,7 @@ The dist artifact includes:
 - assets/
 
 Rollback
-The first releasable state is tagged as v0.1.0 in git. The first deploy-ready state is tagged as v0.1.1. The populated workspace release is tagged as v0.2.0. The markdown-vault source-of-truth release is tagged as v0.3.0. The first expanded content batch is tagged as v0.4.0. The local vault CLI release is tagged as v0.5.0. The private global work DB generator release is intended to be tagged as v0.6.0. A rollback can restore any release tag.
+The first releasable state is tagged as v0.1.0 in git. The first deploy-ready state is tagged as v0.1.1. The populated workspace release is tagged as v0.2.0. The markdown-vault source-of-truth release is tagged as v0.3.0. The first expanded content batch is tagged as v0.4.0. The local vault CLI release is tagged as v0.5.0. The private global work DB generator release is tagged as v0.6.0. The work DB safety patch is intended to be tagged as v0.6.1. A rollback can restore any release tag.
 
 Validation
 Run:
