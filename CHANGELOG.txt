@@ -1,5 +1,11 @@
 LLM Knowledge Bases Changelog
 
+Version v0.1.1 - 2026-06-15
+- Added a dedicated GitHub Pages build script that publishes only site files into dist/.
+- Updated the GitHub Pages workflow to run static validation before deploy.
+- Updated the GitHub Pages workflow to upload dist/ instead of the full repository root.
+- Updated project version metadata and documentation for deploy readiness.
+
 Version v0.1.0 - 2026-06-15
 - Created the first static landing page for the LLM Knowledge Bases concept.
 - Added a generated local hero image asset for the first viewport.

@@ -11,6 +11,7 @@ const required = [
   "CHANGELOG.txt",
   "TECHNICAL_DOCUMENTATION.txt",
   "assets/knowledge-workbench-hero.png",
+  "scripts/build-pages.mjs",
   ".github/workflows/pages.yml"
 ];
 
