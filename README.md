@@ -1,6 +1,6 @@
 # LLM Knowledge Bases
 
-Static landing page for the LLM Knowledge Bases product concept.
+Firebase-hosted landing page and authenticated workspace for the LLM Knowledge Bases product concept.
 
 The page presents a filesystem-first research workflow:
 
@@ -8,10 +8,13 @@ The page presents a filesystem-first research workflow:
 - agent-maintained markdown wiki compilation
 - Q&A and Obsidian-ready outputs
 - health checks for data integrity
+- a populated workspace backed by Firebase Auth and Firestore
 
 ## Local Preview
 
 Open `index.html` in a browser, or run a local static server from this directory.
+
+Open `app.html` through a local static server to review layout. Google sign-in and Firestore reads are intended to run from Firebase Hosting.
 
 ## Build
 
@@ -24,10 +27,38 @@ node scripts/build-pages.mjs
 
 The build output is written to `dist/`.
 
+## Firebase Auth And Data
+
+`firebase-config.js` contains the Firebase Web App config and allowed owner email:
+
+```js
+window.LKB_ACCESS_CONFIG = {
+  allowedEmails: ["j3d1fm@gmail.com"]
+};
+```
+
+Workspace data is stored in Firestore under `vaults/main`. Firestore rules allow read access only when the signed-in Firebase Auth user email is `j3d1fm@gmail.com`.
+
+Current setup blocker: Firebase Authentication still needs to be initialized in the Firebase Console and Google sign-in must be enabled for project `llm-knowledge-bases`. CLI/API initialization returned `CONFIGURATION_NOT_FOUND`, and the API init route requires billing-enabled Identity Platform.
+
+Manual console path:
+
+```text
+Firebase Console -> llm-knowledge-bases -> Authentication -> Get started -> Sign-in method -> Google -> Enable -> Save
+```
+
+Seed or refresh the demo vault with:
+
+```bash
+node scripts/seed-firestore.mjs
+```
+
 ## Deploy Target
 
-The repository is prepared for GitHub Pages through `.github/workflows/pages.yml`. The workflow validates the static site, builds a minimal `dist/` artifact, and deploys only that artifact.
+Primary deploy target: Firebase Hosting project `llm-knowledge-bases`.
+
+Legacy deploy target: GitHub Pages workflow still exists, but it should be treated as secondary because authenticated workspace data now depends on Firebase Auth and Firestore.
 
 ## Version
 
-Current version: `v0.1.1`
+Current version: `v0.2.0`

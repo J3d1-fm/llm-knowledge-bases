@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Authenticated LLM Knowledge Bases workspace demo with compiled wiki content, source coverage, health checks, and outputs.">
+    <meta name="theme-color" content="#0f191a">
+    <title>Workspace | LLM Knowledge Bases</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="firebase-config.js"></script>
+    <script type="module" src="app.js"></script>
+  </head>
+  <body class="app-body">
+    <a class="skip-link" href="#workspace">Skip to workspace</a>
+
+    <header class="app-topbar" aria-label="Workspace">
+      <a class="brand" href="index.html" aria-label="Back to LLM Knowledge Bases home">
+        <span class="brand-mark" aria-hidden="true">KB</span>
+        <span>LLM Knowledge Bases</span>
+      </a>
+      <div class="app-session">
+        <span class="session-pill" id="sessionState">Signed out</span>
+        <button class="text-button" id="signOutButton" type="button" hidden>Sign out</button>
+      </div>
+    </header>
+
+    <main id="workspace">
+      <section class="auth-gate" id="authGate">
+        <div class="auth-panel">
+          <p class="eyebrow">Private workspace</p>
+          <h1>Compiled research is available after Google sign-in.</h1>
+          <p>
+            The populated knowledge base is stored in Firestore and is readable only after
+            Firebase Authentication confirms the allowed Google account.
+          </p>
+          <div class="auth-actions">
+            <button class="button primary" id="signInButton" type="button">Continue with Google</button>
+          </div>
+          <p class="auth-note" id="authNote">
+            Access is currently restricted to j3d1fm@gmail.com.
+          </p>
+        </div>
+      </section>
+
+      <section class="knowledge-shell" id="knowledgeShell" hidden>
+        <aside class="kb-sidebar" aria-label="Workspace navigation">
+          <div class="kb-context">
+            <p class="eyebrow">Vault snapshot</p>
+            <h2 id="vaultTitle">Research Wiki</h2>
+            <p id="vaultSummary"></p>
+          </div>
+          <label class="search-label" for="kbSearch">Search</label>
+          <input class="kb-search" id="kbSearch" type="search" placeholder="Find articles, sources, checks">
+          <nav class="kb-nav" aria-label="Knowledge views">
+            <button class="kb-nav-button is-active" type="button" data-view="articles">Articles</button>
+            <button class="kb-nav-button" type="button" data-view="sources">Sources</button>
+            <button class="kb-nav-button" type="button" data-view="checks">Health checks</button>
+            <button class="kb-nav-button" type="button" data-view="outputs">Outputs</button>
+          </nav>
+        </aside>
+
+        <section class="kb-main" aria-live="polite">
+          <div class="kb-summary-grid" id="summaryGrid"></div>
+
+          <div class="kb-workbench">
+            <section class="kb-list-panel" aria-label="Knowledge items">
+              <div class="panel-heading">
+                <p class="eyebrow" id="listEyebrow">Articles</p>
+                <h2 id="listTitle">Compiled wiki</h2>
+              </div>
+              <div class="kb-list" id="kbList"></div>
+            </section>
+
+            <article class="kb-detail-panel" id="detailPanel" aria-label="Selected item"></article>
+          </div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

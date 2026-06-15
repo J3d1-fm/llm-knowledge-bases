@@ -1,5 +1,17 @@
 LLM Knowledge Bases Changelog
 
+Version v0.2.0 - 2026-06-15
+- Added a populated workspace demo at app.html with compiled articles, sources, health checks, and outputs.
+- Added Firebase Auth Google sign-in wiring for the workspace.
+- Added Firebase Hosting configuration for project llm-knowledge-bases.
+- Added Firestore rules that allow reads only for j3d1fm@gmail.com and disable client writes.
+- Added Firestore seed scripts for the populated knowledge vault.
+- Added app smoke validation for stale auth/UI wiring.
+- Updated the landing page to route into the workspace.
+- Updated build and validation scripts to include the workspace and Firebase config.
+- Updated technical documentation for Firebase Hosting/Auth/Firestore deployment.
+- Documented the remaining Firebase Authentication provider setup blocker.
+
 Version v0.1.1 - 2026-06-15
 - Added a dedicated GitHub Pages build script that publishes only site files into dist/.
 - Updated the GitHub Pages workflow to run static validation before deploy.

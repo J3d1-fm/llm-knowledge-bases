@@ -1,0 +1,21 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email == "j3d1fm@gmail.com"
+        && request.auth.token.email_verified == true;
+    }
+
+    match /vaults/{vaultId} {
+      allow read: if isOwner();
+      allow write: if false;
+
+      match /{collection}/{docId} {
+        allow read: if isOwner();
+        allow write: if false;
+      }
+    }
+  }
+}

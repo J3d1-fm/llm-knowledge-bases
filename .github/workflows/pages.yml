@@ -29,7 +29,9 @@ jobs:
         uses: actions/configure-pages@v5
 
       - name: Validate static site
-        run: node scripts/validate-static.mjs
+        run: |
+          node scripts/validate-static.mjs
+          node scripts/smoke-app.mjs
 
       - name: Build Pages artifact
         run: node scripts/build-pages.mjs

@@ -6,8 +6,11 @@ const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const dist = join(root, "dist");
 const siteFiles = [
   "index.html",
+  "app.html",
   "styles.css",
   "script.js",
+  "app.js",
+  "firebase-config.js",
   ".nojekyll",
   "assets"
 ];
