@@ -108,6 +108,8 @@ The public site does not ship private paths or files. It includes only `assets/t
 
 The authenticated Firebase workspace can load a remote-safe Work DB context collection from Firestore. This is not a full raw file mirror. It contains project, cluster, tag, external-inventory, and summary cards with counts and local Codex follow-up commands. Use the local CLI for exact paths, previews, and source inspection.
 
+After Google sign-in, `app.html` opens on Work DB first and shows cloud status cards for Firestore connectivity, remote-safe privacy mode, and the local Codex context command. If the Firestore `workdbContext` collection is empty or missing its summary document, the app fails with a clear setup error instead of showing an empty workspace.
+
 Open the private graph through the local server when you want in-graph analysis buttons to run directly:
 
 ```bash
@@ -187,4 +189,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.10.2`
+Current version: `v0.11.0`

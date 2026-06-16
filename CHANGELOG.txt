@@ -1,5 +1,12 @@
 LLM Knowledge Bases Changelog
 
+Version v0.11.0 - 2026-06-16
+- Changed the authenticated workspace to open on the Work DB view by default instead of the article list.
+- Added cloud Work DB status diagnostics for Firestore connectivity, remote-safe privacy mode, and Codex context commands.
+- Added clear fail-fast errors when Firestore `workdbContext` is empty or missing its summary document.
+- Added copyable Local Codex follow-up commands inside Work DB detail records.
+- Extended app smoke validation to guard the Work DB-first cloud diagnostics contract.
+
 Version v0.10.2 - 2026-06-16
 - Updated the private work graph renderer so edge line drawing and bend-dot drawing both use the same path vertex array.
 - Added support for two marked bend vertices on long graph links and strengthened dimmed bend markers for zoomed-out views.

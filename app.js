@@ -28,6 +28,7 @@ const signOutButton = document.querySelector("#signOutButton");
 const signInButton = document.querySelector("#signInButton");
 const authNote = document.querySelector("#authNote");
 const summaryGrid = document.querySelector("#summaryGrid");
+const cloudStatus = document.querySelector("#cloudStatus");
 const vaultTitle = document.querySelector("#vaultTitle");
 const vaultSummary = document.querySelector("#vaultSummary");
 const listEyebrow = document.querySelector("#listEyebrow");
@@ -36,7 +37,7 @@ const kbList = document.querySelector("#kbList");
 const detailPanel = document.querySelector("#detailPanel");
 const kbSearch = document.querySelector("#kbSearch");
 
-let activeView = "articles";
+let activeView = "workdb";
 let activeItemId = null;
 let currentUser = null;
 let knowledgeBase = null;
@@ -75,7 +76,11 @@ async function showWorkspace(user) {
   knowledgeShell.hidden = false;
   sessionState.textContent = user.email || "Signed in";
   signOutButton.hidden = false;
+  activeView = "workdb";
+  activeItemId = null;
+  updateNavState();
   summaryGrid.innerHTML = `<article class="kb-stat"><span>Status</span><strong>Loading</strong></article>`;
+  renderCloudStatus("loading");
   knowledgeBase = await loadKnowledgeBase();
   renderWorkspace();
 }
@@ -94,6 +99,14 @@ async function loadKnowledgeBase() {
     loadCollection("checks"),
     loadCollection("outputs")
   ]);
+
+  if (!workdbContext.length) {
+    throw new Error("Firestore Work DB context is empty. Run npm run seed:firestore after rebuilding the local Work DB.");
+  }
+
+  if (!workdbContext.some((item) => item.kind === "summary")) {
+    throw new Error("Firestore Work DB context is missing its summary document.");
+  }
 
   return {
     meta: vaultSnapshot.data(),
@@ -138,7 +151,9 @@ function itemMatches(item, query) {
 function renderWorkspace() {
   vaultTitle.textContent = knowledgeBase.meta.title;
   vaultSummary.textContent = knowledgeBase.meta.summary;
+  updateNavState();
   renderSummary();
+  renderCloudStatus("ready");
   renderList();
 }
 
@@ -156,6 +171,51 @@ function renderSummary() {
     <article class="kb-stat">
       <span>${escapeHtml(label)}</span>
       <strong>${escapeHtml(value)}</strong>
+    </article>
+  `).join("");
+}
+
+function renderCloudStatus(state, error = null) {
+  if (!cloudStatus) return;
+
+  if (state === "loading") {
+    cloudStatus.innerHTML = `
+      <article class="cloud-status-card">
+        <span>Cloud DB</span>
+        <strong>Loading Firestore</strong>
+        <p>Checking the authenticated vault and Work DB context.</p>
+      </article>
+    `;
+    return;
+  }
+
+  if (state === "error") {
+    cloudStatus.innerHTML = `
+      <article class="cloud-status-card is-error">
+        <span>Cloud DB</span>
+        <strong>Unavailable</strong>
+        <p>${escapeHtml(error?.message || "Firestore workspace failed to load.")}</p>
+      </article>
+    `;
+    return;
+  }
+
+  const meta = knowledgeBase.meta;
+  const workSummary = knowledgeBase.workdb.find((item) => item.kind === "summary") || {};
+  const workDocs = knowledgeBase.workdb.length;
+  const privacyMode = meta.workdbPrivacyMode || workSummary.privacyMode || "remote-index-no-paths-no-snippets-no-file-content";
+  const defaultCommand = (workSummary.localCommands || []).find((command) => command.includes("context"))
+    || "npm run workdb -- context \"query\" --limit 12";
+
+  cloudStatus.innerHTML = [
+    ["Cloud DB", "Connected", `${workDocs} Work DB docs loaded from Firestore after Google sign-in.`, "is-ok"],
+    ["Privacy", "Remote-safe", privacyMode, "is-ok"],
+    ["Codex Context", "Ready", defaultCommand, "is-command"]
+  ].map(([label, title, body, className]) => `
+    <article class="cloud-status-card ${className}">
+      <span>${escapeHtml(label)}</span>
+      <strong>${escapeHtml(title)}</strong>
+      <p>${escapeHtml(body)}</p>
     </article>
   `).join("");
 }
@@ -253,7 +313,12 @@ function renderCommandBlock(commands = []) {
     <section class="detail-section">
       <h3>Local Codex follow-up</h3>
       <div class="command-list">
-        ${rows.map((command) => `<code>${escapeHtml(command)}</code>`).join("")}
+        ${rows.map((command) => `
+          <button class="command-copy" type="button" data-command="${escapeHtml(command)}">
+            <code>${escapeHtml(command)}</code>
+            <span>Copy</span>
+          </button>
+        `).join("")}
       </div>
     </section>
   `;
@@ -355,6 +420,18 @@ function renderDetail(item) {
       renderList();
     });
   });
+
+  detailPanel.querySelectorAll("[data-command]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const command = button.dataset.command || "";
+      try {
+        await navigator.clipboard.writeText(command);
+        button.querySelector("span").textContent = "Copied";
+      } catch {
+        button.querySelector("span").textContent = "Select";
+      }
+    });
+  });
 }
 
 function updateNavState() {
@@ -405,6 +482,7 @@ onAuthStateChanged(auth, async (user) => {
   try {
     await showWorkspace(user);
   } catch (error) {
+    renderCloudStatus("error", error);
     authNote.textContent = error.message;
     showGate();
   }
