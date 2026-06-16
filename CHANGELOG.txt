@@ -1,5 +1,9 @@
 LLM Knowledge Bases Changelog
 
+Version v0.10.1 - 2026-06-16
+- Added a live Firestore Work DB smoke test command that validates the seeded `workdbContext` collection through Google OAuth.
+- Added cloud-data render-contract checks for Work DB counts, kinds, searchability, local Codex commands, and privacy leak boundaries.
+
 Version v0.10.0 - 2026-06-16
 - Added a remote-safe Work DB context builder that derives Firestore-ready project, cluster, tag, external, and summary documents from the private local workdb.
 - Extended Firestore seeding to upload the authenticated `workdbContext` collection while excluding local paths, snippets, file content, and git remotes.

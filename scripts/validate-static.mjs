@@ -23,6 +23,7 @@ const required = [
   "scripts/load-vault.mjs",
   "scripts/remote-workdb-context.mjs",
   "scripts/smoke-app.mjs",
+  "scripts/validate-firestore-workdb.mjs",
   "scripts/validate-vault.mjs",
   "scripts/workdb.mjs",
   "vault/index.md",

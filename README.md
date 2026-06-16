@@ -139,6 +139,7 @@ node scripts/validate-static.mjs
 node scripts/validate-vault.mjs
 node scripts/validate-workdb.mjs
 node scripts/build-pages.mjs
+npm run validate:firestore-workdb
 ```
 
 The build output is written to `dist/`.
@@ -176,6 +177,8 @@ npm run seed:firestore
 
 The seed command validates the vault first, builds the remote-safe Work DB context from `outputs/global-work-kb/db.json`, clears stale managed documents, then writes the current markdown snapshot and `workdbContext` documents.
 
+After seeding, run `npm run validate:firestore-workdb` to verify the live Firestore Work DB collection, render-contract fields, local follow-up commands, and privacy boundary.
+
 ## Deploy Target
 
 Primary deploy target: Firebase Hosting project `llm-knowledge-bases`.
@@ -184,4 +187,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.10.0`
+Current version: `v0.10.1`
