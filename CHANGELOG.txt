@@ -1,5 +1,11 @@
 LLM Knowledge Bases Changelog
 
+Version v0.12.0 - 2026-06-16
+- Added a live Firestore Work DB context CLI so Codex can query the remote DB directly with `npm run workdb:cloud -- "<query>"`.
+- Added remote-safe cloud context commands to Work DB records in Firestore and the authenticated workspace.
+- Updated the authenticated detail panel to show both cloud and local Codex follow-up commands.
+- Extended live Firestore validation to require cloud context commands alongside local drill-down commands.
+
 Version v0.11.1 - 2026-06-16
 - Replaced the oversized public sign-in hero with a compact top-bar Google sign-in button.
 - Removed public sign-in copy that described Firebase, Firestore, allowlist, or account restrictions in the UI.

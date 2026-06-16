@@ -315,7 +315,7 @@ function renderCommandBlock(commands = []) {
   if (!rows.length) return "";
   return `
     <section class="detail-section">
-      <h3>Local Codex follow-up</h3>
+      <h3>Codex follow-up</h3>
       <div class="command-list">
         ${rows.map((command) => `
           <button class="command-copy" type="button" data-command="${escapeHtml(command)}">
@@ -367,7 +367,13 @@ function renderDetail(item) {
       item.codexSessionCount !== undefined ? ["Codex sessions", item.codexSessionCount] : null,
       item.claudeSessionCount !== undefined ? ["Claude records", item.claudeSessionCount] : null
     ].filter(Boolean);
-    const commands = item.localCommands || [item.localCommand, item.localSearchCommand].filter(Boolean);
+    const commands = [
+      item.cloudCommand,
+      ...(item.cloudCommands || []),
+      ...(item.localCommands || []),
+      item.localCommand,
+      item.localSearchCommand
+    ].filter(Boolean);
     detailPanel.innerHTML = `
       <p class="eyebrow">${escapeHtml(item.kind)}${item.clusterLabel ? ` · ${escapeHtml(item.clusterLabel)}` : ""}</p>
       <h2>${escapeHtml(item.title)}</h2>

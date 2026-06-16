@@ -122,6 +122,11 @@ function commandFor(query, limit = 12) {
   return `npm run workdb -- context "${escaped}" --limit ${limit}`;
 }
 
+function cloudCommandFor(query, limit = 12) {
+  const escaped = String(query || "").replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+  return `npm run workdb:cloud -- "${escaped}" --limit ${limit}`;
+}
+
 function makeItem(kind, id, title, summary, data = {}) {
   return {
     id: `${kind}-${slugify(id)}`,
@@ -192,6 +197,7 @@ export function buildRemoteWorkdbContext(options = {}) {
       firebaseProjectCount: db.counts.firebaseProjects,
       privacyMode: "remote-index-no-paths-no-snippets-no-file-content",
       localCommands: [
+        "npm run workdb:cloud -- \"query\" --limit 12",
         "npm run workdb -- search \"query\" --limit 20",
         "npm run workdb -- context \"query\" --limit 12",
         "npm run workdb -- tags --limit 40"
@@ -213,6 +219,7 @@ export function buildRemoteWorkdbContext(options = {}) {
         recordCount: cluster.recordCount,
         projectCount: cluster.projectCount,
         tags: cluster.tags,
+        cloudCommand: cloudCommandFor(cluster.label),
         localCommand: commandFor(cluster.label)
       }
     ));
@@ -238,6 +245,7 @@ export function buildRemoteWorkdbContext(options = {}) {
         tags,
         hasRemote: Boolean(project.remote),
         hasSensitiveSignals: hasSensitiveSignal(project.tags || []),
+        cloudCommand: cloudCommandFor(project.name),
         localCommand: commandFor(project.name),
         localSearchCommand: `npm run workdb -- search "${String(project.name || "").replaceAll('"', '\\"')}" --limit 20`
       }
@@ -258,6 +266,7 @@ export function buildRemoteWorkdbContext(options = {}) {
         clusterId,
         clusterLabel: cluster.label,
         tags: [tag.tag],
+        cloudCommand: cloudCommandFor(tag.tag),
         localCommand: commandFor(tag.tag)
       }
     ));
@@ -280,6 +289,7 @@ export function buildRemoteWorkdbContext(options = {}) {
         clusterId: "cloud-auth",
         clusterLabel: clusterById.get("cloud-auth").label,
         tags: [id, "cloud-auth"],
+        cloudCommand: cloudCommandFor(title),
         localCommand: commandFor(title)
       }
     ));

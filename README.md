@@ -62,6 +62,7 @@ npm run workdb -- show <graph-id-or-path>
 npm run workdb -- analyze-tag "firebase"
 npm run workdb -- analyze-cluster "cloud-auth"
 npm run workdb -- serve --port 8765
+npm run workdb:cloud -- "Drive Zone" --limit 12
 npm run workdb:remote
 ```
 
@@ -99,16 +100,21 @@ When served locally, the graph is a working DB surface, not only a picture:
 Codex can use this database as a routing layer before opening full project files:
 
 ```bash
+npm run workdb:cloud -- "project or topic" --limit 12
 npm run workdb -- context "project or topic" --limit 12
 npm run workdb -- search "project or topic" --limit 20 --json
 npm run workdb -- show <graph-id-or-path>
 ```
+
+`npm run workdb:cloud` fetches the live Firestore `workdbContext` collection and returns a remote-safe markdown context pack. It is the remote DB entrypoint for Codex when exact local paths and snippets are not needed. The local `npm run workdb -- context` command remains the deeper private drill-down for source paths, previews, and Finder reveal.
 
 The public site does not ship private paths or files. It includes only `assets/tag-cloud-snapshot.json`, a sanitized label-free visual snapshot generated from the private graph.
 
 The authenticated Firebase workspace can load a remote-safe Work DB context collection from Firestore. This is not a full raw file mirror. It contains project, cluster, tag, external-inventory, and summary cards with counts and local Codex follow-up commands. Use the local CLI for exact paths, previews, and source inspection.
 
 After Google sign-in, `app.html` opens on Work DB first and shows cloud status cards for Firestore connectivity, remote-safe privacy mode, and the local Codex context command. If the Firestore `workdbContext` collection is empty or missing its summary document, the app fails with a clear setup error instead of showing an empty workspace.
+
+Work DB detail records include copyable cloud context commands for the live Firestore layer plus local follow-up commands for exact private inspection.
 
 Open the private graph through the local server when you want in-graph analysis buttons to run directly:
 
@@ -189,4 +195,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.11.1`
+Current version: `v0.12.0`

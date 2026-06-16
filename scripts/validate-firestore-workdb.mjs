@@ -126,7 +126,13 @@ function renderContract(items, meta) {
     firstItem: sorted[0],
     driveMatches: driveMatches.length,
     firebaseMatches: firebaseMatches.length,
-    commands: sorted.flatMap((item) => item.localCommands || [item.localCommand, item.localSearchCommand].filter(Boolean)).filter(Boolean).slice(0, 8)
+    commands: sorted.flatMap((item) => [
+      item.cloudCommand,
+      ...(item.cloudCommands || []),
+      ...(item.localCommands || []),
+      item.localCommand,
+      item.localSearchCommand
+    ].filter(Boolean)).filter(Boolean).slice(0, 12)
   };
 }
 
@@ -151,6 +157,7 @@ async function main() {
   if (!contract.driveMatches) failures.push("Render contract cannot find Drive Zone context.");
   if (!contract.firebaseMatches) failures.push("Render contract cannot find Firebase context.");
   if (!contract.commands.some((command) => command.includes("npm run workdb -- context"))) failures.push("Render contract has no local workdb context command.");
+  if (!contract.commands.some((command) => command.includes("npm run workdb:cloud"))) failures.push("Render contract has no live Firestore cloud context command.");
 
   if (failures.length) {
     console.error(failures.join("\n"));
