@@ -1,5 +1,10 @@
 LLM Knowledge Bases Changelog
 
+Version v0.12.1 - 2026-06-16
+- Fixed the authenticated workspace blank-screen regression by restoring strong `[hidden]` behavior for auth/workspace view switching.
+- Added the label-free Work DB tag cloud snapshot directly to the signed-in workspace.
+- Added smoke validation so the authenticated graph canvas and hidden-state CSS cannot disappear silently.
+
 Version v0.12.0 - 2026-06-16
 - Added a live Firestore Work DB context CLI so Codex can query the remote DB directly with `npm run workdb:cloud -- "<query>"`.
 - Added remote-safe cloud context commands to Work DB records in Firestore and the authenticated workspace.

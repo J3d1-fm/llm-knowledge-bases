@@ -114,6 +114,8 @@ The authenticated Firebase workspace can load a remote-safe Work DB context coll
 
 After Google sign-in, `app.html` opens on Work DB first and shows cloud status cards for Firestore connectivity, remote-safe privacy mode, and the local Codex context command. If the Firestore `workdbContext` collection is empty or missing its summary document, the app fails with a clear setup error instead of showing an empty workspace.
 
+The signed-in Work DB view also renders the label-free tag cloud snapshot above the cards, using the same sanitized `assets/tag-cloud-snapshot.json` as the public homepage.
+
 Work DB detail records include copyable cloud context commands for the live Firestore layer plus local follow-up commands for exact private inspection.
 
 Open the private graph through the local server when you want in-graph analysis buttons to run directly:
@@ -195,4 +197,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.12.0`
+Current version: `v0.12.1`

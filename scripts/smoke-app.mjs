@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const appJs = readFileSync(join(root, "app.js"), "utf8");
 const appHtml = readFileSync(join(root, "app.html"), "utf8");
+const styles = readFileSync(join(root, "styles.css"), "utf8");
 const failures = [];
 
 const forbiddenStaleIdentifiers = [
@@ -47,6 +48,14 @@ if (!appJs.includes("Firestore Work DB context is empty")) {
 
 if (appHtml.indexOf('data-view="workdb"') > appHtml.indexOf('data-view="articles"')) {
   failures.push("Work DB navigation must appear before Articles.");
+}
+
+if (!appHtml.includes('id="workdbSnapshot"') || !appJs.includes("function startWorkdbSnapshot")) {
+  failures.push("Authenticated workspace must render the Work DB tag cloud snapshot.");
+}
+
+if (!styles.includes("[hidden]") || !styles.includes("display: none !important")) {
+  failures.push("Stylesheet must preserve hidden attribute behavior for auth/workspace view switching.");
 }
 
 const forbiddenAuthGateCopy = [

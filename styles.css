@@ -22,6 +22,10 @@
   box-sizing: border-box;
 }
 
+[hidden] {
+  display: none !important;
+}
+
 html {
   scroll-behavior: smooth;
 }
@@ -628,6 +632,38 @@ h3 {
 .kb-main {
   min-width: 0;
   padding: 24px;
+}
+
+.workdb-map {
+  position: relative;
+  min-height: clamp(280px, 38svh, 430px);
+  overflow: hidden;
+  border: 1px solid rgba(244, 241, 232, 0.12);
+  border-radius: var(--radius);
+  background:
+    radial-gradient(circle at 50% 48%, rgba(75, 214, 196, 0.1), transparent 32%),
+    radial-gradient(circle at 22% 72%, rgba(244, 184, 76, 0.08), transparent 24%),
+    #121c1c;
+  margin-bottom: 18px;
+}
+
+.workdb-map-canvas {
+  display: block;
+  width: 100%;
+  height: clamp(280px, 38svh, 430px);
+}
+
+.workdb-map-meta {
+  position: absolute;
+  left: 18px;
+  top: 16px;
+  pointer-events: none;
+}
+
+.workdb-map-meta strong {
+  display: block;
+  color: rgba(244, 241, 232, 0.82);
+  font-size: 0.94rem;
 }
 
 .kb-summary-grid {
