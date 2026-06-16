@@ -1215,7 +1215,9 @@ function writeTagCloud(db) {
 <div class="panel topbar">
   <div class="title"><strong>Global Work Tag Graph</strong><span>${graph.counts.clusters} clusters · ${graph.nodes.length} visible nodes · ${graph.counts.totalFiles} files · ${graph.edges.length} links</span></div>
   <input id="search" type="search" placeholder="Search tag, cluster, project, repo">
-  <button id="fit" type="button">Fit</button>
+  <button id="zoomOut" type="button" aria-label="Zoom out" title="Zoom out">-</button>
+  <button id="zoomIn" type="button" aria-label="Zoom in" title="Zoom in">+</button>
+  <button id="fit" type="button">Fit all</button>
   <button id="reset" type="button">Reset</button>
 </div>
 <nav class="panel cluster-rail" id="clusterRail" aria-label="Theme clusters"></nav>
@@ -1239,6 +1241,8 @@ const tooltip = document.getElementById("tooltip");
 const search = document.getElementById("search");
 const reset = document.getElementById("reset");
 const fit = document.getElementById("fit");
+const zoomOut = document.getElementById("zoomOut");
+const zoomIn = document.getElementById("zoomIn");
 const inspector = document.getElementById("inspector");
 const inspectorType = document.getElementById("inspectorType");
 const inspectorTitle = document.getElementById("inspectorTitle");
@@ -1258,6 +1262,9 @@ const colors = {
   session: "#777b77",
   system: "#d2b7ff"
 };
+const MIN_ZOOM = 0.08;
+const MAX_ZOOM = 3;
+const FIT_MAX_ZOOM = 1.8;
 let width = 0;
 let height = 0;
 let scale = 1;
@@ -1363,7 +1370,19 @@ function screenToWorld(x, y) {
     y: (y - height / 2 - panY) / (scale * zoom)
   };
 }
-function fitToGraph() {
+function publishGraphState() {
+  document.documentElement.dataset.graphZoom = zoom.toFixed(4);
+  document.documentElement.dataset.graphMinZoom = String(MIN_ZOOM);
+  document.documentElement.dataset.graphMaxZoom = String(MAX_ZOOM);
+  const bounds = graphBounds();
+  if (bounds) {
+    document.documentElement.dataset.graphBoundsLeft = String(Math.round(width / 2 + panX + bounds.minX * scale * zoom));
+    document.documentElement.dataset.graphBoundsRight = String(Math.round(width / 2 + panX + bounds.maxX * scale * zoom));
+    document.documentElement.dataset.graphBoundsTop = String(Math.round(height / 2 + panY + bounds.minY * scale * zoom));
+    document.documentElement.dataset.graphBoundsBottom = String(Math.round(height / 2 + panY + bounds.maxY * scale * zoom));
+  }
+}
+function graphBounds() {
   let minX = Infinity;
   let minY = Infinity;
   let maxX = -Infinity;
@@ -1375,19 +1394,33 @@ function fitToGraph() {
     minY = Math.min(minY, node.y - pad);
     maxY = Math.max(maxY, node.y + pad);
   }
-  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return null;
   const worldWidth = Math.max(0.2, maxX - minX);
   const worldHeight = Math.max(0.2, maxY - minY);
-  const safe = { left: 40, top: 92, right: 244, bottom: 72 };
+  return { minX, minY, maxX, maxY, worldWidth, worldHeight };
+}
+function fitToGraph() {
+  const bounds = graphBounds();
+  if (!bounds) return;
+  const safe = { left: 28, top: 92, right: 228, bottom: 48 };
   const availableWidth = Math.max(360, width - safe.left - safe.right);
   const availableHeight = Math.max(300, height - safe.top - safe.bottom);
-  zoom = Math.max(0.44, Math.min(1.8, Math.min(availableWidth / (worldWidth * scale), availableHeight / (worldHeight * scale))));
-  const centerX = (minX + maxX) / 2;
-  const centerY = (minY + maxY) / 2;
+  const fittedZoom = Math.min(availableWidth / (bounds.worldWidth * scale), availableHeight / (bounds.worldHeight * scale));
+  zoom = Math.max(MIN_ZOOM, Math.min(FIT_MAX_ZOOM, fittedZoom));
+  const centerX = (bounds.minX + bounds.maxX) / 2;
+  const centerY = (bounds.minY + bounds.maxY) / 2;
   const safeCenterX = safe.left + availableWidth / 2;
   const safeCenterY = safe.top + availableHeight / 2;
   panX = safeCenterX - width / 2 - centerX * scale * zoom;
   panY = safeCenterY - height / 2 - centerY * scale * zoom;
+  publishGraphState();
+}
+function applyZoomAt(canvasX, canvasY, factor) {
+  const before = screenToWorld(canvasX, canvasY);
+  zoom = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, zoom * factor));
+  panX = canvasX - width / 2 - before.x * scale * zoom;
+  panY = canvasY - height / 2 - before.y * scale * zoom;
+  publishGraphState();
 }
 function magnifiedPosition(node) {
   const baseX = screenX(node);
@@ -1741,12 +1774,43 @@ function focusNode(node) {
   selected = node;
   activeClusterId = node.type === "cluster" ? node.cluster : node.cluster || "";
   const center = node.type === "cluster" ? node : byId.get("cluster:" + node.cluster) || node;
-  zoom = Math.max(1.08, Math.min(1.7, zoom));
+  zoom = Math.max(1.08, Math.min(FIT_MAX_ZOOM, zoom));
   panX = -center.x * scale * zoom;
   panY = -center.y * scale * zoom;
+  publishGraphState();
   updateClusterRail();
   scheduleDraw();
 }
+window.__workGraphDebug = {
+  getState: function() {
+    const bounds = graphBounds();
+    return {
+      width,
+      height,
+      scale,
+      zoom,
+      minZoom: MIN_ZOOM,
+      maxZoom: MAX_ZOOM,
+      panX,
+      panY,
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+      clusterCount: orderedClusters.length,
+      worldWidth: bounds ? bounds.worldWidth : 0,
+      worldHeight: bounds ? bounds.worldHeight : 0
+    };
+  },
+  fitAll: function() {
+    fitToGraph();
+    scheduleDraw();
+    return this.getState();
+  },
+  zoomOut: function() {
+    applyZoomAt(width / 2, height / 2, 0.7);
+    scheduleDraw();
+    return this.getState();
+  }
+};
 function updateClusterRail() {
   clusterRail.querySelectorAll("[data-cluster-id]").forEach(function(button) {
     button.classList.toggle("is-active", button.dataset.clusterId === activeClusterId);
@@ -1835,11 +1899,8 @@ canvas.addEventListener("dblclick", function(event) {
 canvas.addEventListener("wheel", function(event) {
   event.preventDefault();
   const rect = canvas.getBoundingClientRect();
-  const before = screenToWorld(event.clientX - rect.left, event.clientY - rect.top);
   const factor = event.deltaY > 0 ? 0.9 : 1.11;
-  zoom = Math.max(0.62, Math.min(2.45, zoom * factor));
-  panX = event.clientX - rect.left - width / 2 - before.x * scale * zoom;
-  panY = event.clientY - rect.top - height / 2 - before.y * scale * zoom;
+  applyZoomAt(event.clientX - rect.left, event.clientY - rect.top, factor);
   scheduleDraw();
 }, { passive: false });
 search.addEventListener("input", function() {
@@ -1859,6 +1920,14 @@ reset.addEventListener("click", function() {
 });
 fit.addEventListener("click", function() {
   fitToGraph();
+  scheduleDraw();
+});
+zoomOut.addEventListener("click", function() {
+  applyZoomAt(width / 2, height / 2, 0.72);
+  scheduleDraw();
+});
+zoomIn.addEventListener("click", function() {
+  applyZoomAt(width / 2, height / 2, 1.18);
   scheduleDraw();
 });
 closeInspector.addEventListener("click", function() {

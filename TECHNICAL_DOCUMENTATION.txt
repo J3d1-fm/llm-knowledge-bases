@@ -1,6 +1,6 @@
 LLM Knowledge Bases Technical Documentation
 
-Version: v0.8.0
+Version: v0.8.1
 Date: 2026-06-16
 
 Purpose
@@ -118,7 +118,7 @@ The global work database is generated under outputs/global-work-kb and is intent
 - analysis/: Generated markdown dossiers and JSON manifests for selected graph tags and clusters.
 - README.md: generated summary.
 
-The raw source files are the diary-style layer. The raw registry and chronology are rebuildable generated indexes over that layer, not append-only audit logs. The catalog is the living interpretation layer and marks project/theme grouping as inferred. The graph is an operator view over those indexes, not the source of truth. The canvas renders a readable overview graph instead of drawing every indexed file/session as a node; full matched records are exposed through tag/cluster analysis manifests. The graph draws explicit theme clusters, hover magnification, pan/zoom, cluster focus controls, search focus, and a hidden-by-default inspector drawer. Tag and cluster inspector actions run analysis directly when tag-cloud.html is opened through npm run workdb -- serve; static file mode falls back to the CLI command. Each analysis writes a markdown dossier plus a JSON manifest with all matched files, projects, sessions, and related tags.
+The raw source files are the diary-style layer. The raw registry and chronology are rebuildable generated indexes over that layer, not append-only audit logs. The catalog is the living interpretation layer and marks project/theme grouping as inferred. The graph is an operator view over those indexes, not the source of truth. The canvas renders a readable overview graph instead of drawing every indexed file/session as a node; full matched records are exposed through tag/cluster analysis manifests. The graph draws explicit theme clusters, hover magnification, pan/zoom, Fit all, explicit zoom out / zoom in controls, cluster focus controls, search focus, and a hidden-by-default inspector drawer. The graph publishes non-sensitive DOM state for zoom and screen bounds so validation can verify that the full clustered graph fits inside the viewport. Tag and cluster inspector actions run analysis directly when tag-cloud.html is opened through npm run workdb -- serve; static file mode falls back to the CLI command. Each analysis writes a markdown dossier plus a JSON manifest with all matched files, projects, sessions, and related tags.
 
 Commands:
 npm run workdb -- refresh-external
@@ -184,7 +184,7 @@ The dist artifact includes:
 - assets/
 
 Rollback
-The first releasable state is tagged as v0.1.0 in git. The first deploy-ready state is tagged as v0.1.1. The populated workspace release is tagged as v0.2.0. The markdown-vault source-of-truth release is tagged as v0.3.0. The first expanded content batch is tagged as v0.4.0. The local vault CLI release is tagged as v0.5.0. The private global work DB generator release is tagged as v0.6.0. The work DB safety patch is tagged as v0.6.1. The Hermes-style memory graph and raw/wiki/provenance outputs are intended to be tagged as v0.7.0. The clustered graph, hover magnification, and tag/cluster analysis CLI release is intended to be tagged as v0.8.0. A rollback can restore any release tag.
+The first releasable state is tagged as v0.1.0 in git. The first deploy-ready state is tagged as v0.1.1. The populated workspace release is tagged as v0.2.0. The markdown-vault source-of-truth release is tagged as v0.3.0. The first expanded content batch is tagged as v0.4.0. The local vault CLI release is tagged as v0.5.0. The private global work DB generator release is tagged as v0.6.0. The work DB safety patch is tagged as v0.6.1. The Hermes-style memory graph and raw/wiki/provenance outputs are tagged as v0.7.0. The clustered graph, hover magnification, and tag/cluster analysis CLI release is tagged as v0.8.0. The graph zoom-fit patch is intended to be tagged as v0.8.1. A rollback can restore any release tag.
 
 Validation
 Run:

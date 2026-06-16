@@ -45,6 +45,10 @@ if (!failures.length) {
     ["id=\"inspector\" hidden"],
     ["id=\"clusterRail\""],
     ["function scheduleDraw"],
+    ["const MIN_ZOOM = 0.08"],
+    ["data-graph-zoom", "graphZoom"],
+    ["window.__workGraphDebug"],
+    ["Fit all"],
     ["analyze-cluster"],
     ["analyze-tag"]
   ];
@@ -55,6 +59,9 @@ if (!failures.length) {
   }
   if (html.includes("class=\"panel details\"")) {
     failures.push("Generated graph still contains the legacy always-visible details panel.");
+  }
+  if (html.includes("Math.max(0.44") || html.includes("Math.max(0.62")) {
+    failures.push("Generated graph still contains the old zoom floor that prevents a full zoom-out.");
   }
 }
 

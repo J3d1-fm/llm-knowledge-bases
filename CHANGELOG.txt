@@ -1,5 +1,11 @@
 LLM Knowledge Bases Changelog
 
+Version v0.8.1 - 2026-06-16
+- Fixed the memory graph zoom-out floor so the full clustered map can fit on screen.
+- Renamed the graph fit control to Fit all and added explicit zoom out / zoom in buttons.
+- Added generated graph state markers for zoom and screen bounds so local QA can verify that the graph fits inside the viewport.
+- Updated workdb graph validation to catch regressions to the old zoom limits.
+
 Version v0.8.0 - 2026-06-16
 - Rebuilt the private tag-cloud output as a clustered memory graph instead of a ring-style node map.
 - Added explicit theme cluster nodes and cluster membership for tags, projects, raw samples, sessions, repos, and cloud resources.

@@ -81,6 +81,8 @@ Raw source files are the diary layer. The generated registry and chronology are 
 
 The canvas renders a readable overview graph, not all 80k+ files as individual dots. The full base remains reachable through drill-down counts, analysis reports, and JSON manifests.
 
+Use `Fit all` to show the complete clustered graph in the current viewport. The `-` and `+` controls adjust zoom explicitly when a trackpad or mouse wheel is not precise enough.
+
 Open the private graph through the local server when you want in-graph analysis buttons to run directly:
 
 ```bash
@@ -156,4 +158,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.8.0`
+Current version: `v0.8.1`
