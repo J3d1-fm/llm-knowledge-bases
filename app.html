@@ -19,28 +19,15 @@
         <span>LLM Knowledge Bases</span>
       </a>
       <div class="app-session">
-        <span class="session-pill" id="sessionState">Signed out</span>
+        <p class="auth-note" id="authNote" aria-live="polite"></p>
+        <button class="sign-in-button" id="signInButton" type="button">Sign in with Google</button>
+        <span class="session-pill" id="sessionState" hidden></span>
         <button class="text-button" id="signOutButton" type="button" hidden>Sign out</button>
       </div>
     </header>
 
     <main id="workspace">
-      <section class="auth-gate" id="authGate">
-        <div class="auth-panel">
-          <p class="eyebrow">Private workspace</p>
-          <h1>Compiled research is available after Google sign-in.</h1>
-          <p>
-            The populated knowledge base is stored in Firestore and is readable only after
-            Firebase Authentication confirms the allowed Google account.
-          </p>
-          <div class="auth-actions">
-            <button class="button primary" id="signInButton" type="button">Continue with Google</button>
-          </div>
-          <p class="auth-note" id="authNote">
-            Access is currently restricted to j3d1fm@gmail.com.
-          </p>
-        </div>
-      </section>
+      <section class="auth-gate" id="authGate" aria-label="Private workspace"></section>
 
       <section class="knowledge-shell" id="knowledgeShell" hidden>
         <aside class="kb-sidebar" aria-label="Workspace navigation">

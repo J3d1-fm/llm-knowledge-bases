@@ -477,6 +477,7 @@ h3 {
   display: inline-flex;
   align-items: center;
   gap: 12px;
+  min-width: 0;
 }
 
 .session-pill {
@@ -501,7 +502,26 @@ h3 {
   padding: 0.4rem;
 }
 
+.sign-in-button {
+  min-height: 38px;
+  border: 1px solid rgba(75, 214, 196, 0.34);
+  border-radius: 8px;
+  background: rgba(75, 214, 196, 0.12);
+  color: #d8fff8;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.92rem;
+  font-weight: 760;
+  padding: 0 14px;
+}
+
+.sign-in-button:hover {
+  border-color: rgba(75, 214, 196, 0.58);
+  background: rgba(75, 214, 196, 0.18);
+}
+
 .text-button:focus-visible,
+.sign-in-button:focus-visible,
 .kb-nav-button:focus-visible,
 .kb-list-item:focus-visible,
 .linked-item:focus-visible {
@@ -510,46 +530,21 @@ h3 {
 }
 
 .auth-gate {
-  display: grid;
+  display: block;
   min-height: calc(100svh - 72px);
-  place-items: center;
-  padding: 40px 20px;
-}
-
-.auth-panel {
-  width: min(760px, 100%);
-  border: 1px solid rgba(244, 241, 232, 0.14);
-  border-radius: var(--radius);
   background:
-    linear-gradient(135deg, rgba(75, 214, 196, 0.1), rgba(244, 184, 76, 0.06)),
-    var(--panel);
-  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.32);
-  padding: clamp(28px, 6vw, 56px);
-}
-
-.auth-panel h1 {
-  max-width: 11ch;
-  font-size: clamp(2.6rem, 8vw, 5.8rem);
-}
-
-.auth-panel p {
-  max-width: 620px;
-  color: var(--muted);
-  font-size: 1.05rem;
-}
-
-.auth-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
-  margin: 28px 0 18px;
+    radial-gradient(circle at 52% 42%, rgba(75, 214, 196, 0.08), transparent 34%),
+    #0f1515;
 }
 
 .auth-note {
-  margin-bottom: 0;
-  color: var(--quiet);
-  font-size: 0.94rem;
+  max-width: min(42vw, 460px);
+  overflow: hidden;
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.86rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .knowledge-shell {
@@ -1102,16 +1097,6 @@ h3 {
   .app-session {
     width: 100%;
     justify-content: space-between;
-  }
-
-  .auth-panel h1 {
-    max-width: 10ch;
-    font-size: clamp(2.4rem, 12vw, 3.4rem);
-  }
-
-  .auth-actions {
-    align-items: stretch;
-    flex-direction: column;
   }
 
   .knowledge-shell {

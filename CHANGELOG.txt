@@ -1,5 +1,11 @@
 LLM Knowledge Bases Changelog
 
+Version v0.11.1 - 2026-06-16
+- Replaced the oversized public sign-in hero with a compact top-bar Google sign-in button.
+- Removed public sign-in copy that described Firebase, Firestore, allowlist, or account restrictions in the UI.
+- Replaced detailed public auth/load errors with short user-facing messages while keeping diagnostics in console and validation.
+- Added smoke validation to prevent implementation/security copy from returning to the sign-in screen.
+
 Version v0.11.0 - 2026-06-16
 - Changed the authenticated workspace to open on the Work DB view by default instead of the article list.
 - Added cloud Work DB status diagnostics for Firestore connectivity, remote-safe privacy mode, and Codex context commands.

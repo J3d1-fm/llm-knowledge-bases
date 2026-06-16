@@ -49,6 +49,19 @@ if (appHtml.indexOf('data-view="workdb"') > appHtml.indexOf('data-view="articles
   failures.push("Work DB navigation must appear before Articles.");
 }
 
+const forbiddenAuthGateCopy = [
+  "Firestore",
+  "Firebase Authentication",
+  "allowed Google account",
+  "Access is currently restricted"
+];
+
+for (const phrase of forbiddenAuthGateCopy) {
+  if (appHtml.includes(phrase)) {
+    failures.push(`Public sign-in screen exposes implementation/security copy: ${phrase}`);
+  }
+}
+
 if (failures.length > 0) {
   console.error(failures.join("\n"));
   process.exit(1);

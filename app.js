@@ -67,7 +67,9 @@ function emailAllowed(email) {
 function showGate() {
   authGate.hidden = false;
   knowledgeShell.hidden = true;
-  sessionState.textContent = "Signed out";
+  signInButton.hidden = false;
+  sessionState.hidden = true;
+  sessionState.textContent = "";
   signOutButton.hidden = true;
 }
 
@@ -75,6 +77,8 @@ async function showWorkspace(user) {
   authGate.hidden = true;
   knowledgeShell.hidden = false;
   sessionState.textContent = user.email || "Signed in";
+  sessionState.hidden = false;
+  signInButton.hidden = true;
   signOutButton.hidden = false;
   activeView = "workdb";
   activeItemId = null;
@@ -452,11 +456,12 @@ document.querySelectorAll(".kb-nav-button").forEach((button) => {
 kbSearch.addEventListener("input", renderList);
 
 signInButton.addEventListener("click", async () => {
-  authNote.textContent = "Opening Google sign-in...";
+  authNote.textContent = "";
   try {
     await signInWithPopup(auth, provider);
   } catch (error) {
-    authNote.textContent = `Sign-in failed: ${error.code || error.message}`;
+    console.error(error);
+    authNote.textContent = "Sign-in failed.";
   }
 });
 
@@ -474,7 +479,7 @@ onAuthStateChanged(auth, async (user) => {
 
   if (!emailAllowed(user.email)) {
     await signOut(auth);
-    authNote.textContent = "This Google account is not allowed for this workspace.";
+    authNote.textContent = "Access denied.";
     return;
   }
 
@@ -482,8 +487,9 @@ onAuthStateChanged(auth, async (user) => {
   try {
     await showWorkspace(user);
   } catch (error) {
+    console.error(error);
     renderCloudStatus("error", error);
-    authNote.textContent = error.message;
+    authNote.textContent = "Workspace unavailable.";
     showGate();
   }
 });
