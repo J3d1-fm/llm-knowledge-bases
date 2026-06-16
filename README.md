@@ -57,6 +57,8 @@ npm run workdb -- stats
 npm run workdb -- search "Drive Zone"
 npm run workdb -- project "Piano"
 npm run workdb -- tags --limit 40
+npm run workdb -- context "Drive Zone" --limit 12
+npm run workdb -- show <graph-id-or-path>
 npm run workdb -- analyze-tag "firebase"
 npm run workdb -- analyze-cluster "cloud-auth"
 npm run workdb -- serve --port 8765
@@ -84,6 +86,23 @@ The canvas renders a readable overview graph, not all 80k+ files as individual d
 Every linked graph endpoint is marked with a connection dot, including theme-cluster centers, so lines do not terminate at invisible nodes.
 
 Use `Fit all` to show the complete clustered graph in the current viewport. The `-` and `+` controls adjust zoom explicitly when a trackpad or mouse wheel is not precise enough.
+
+When served locally, the graph is a working DB surface, not only a picture:
+
+- `Context` builds a compact markdown context pack for the selected node.
+- `Preview` reads safe local markdown/text content for indexed file nodes.
+- `Reveal in Finder` opens the indexed local path from the localhost server only.
+- `/api/search`, `/api/context`, `/api/file`, and `/api/open` are available from `npm run workdb -- serve`.
+
+Codex can use this database as a routing layer before opening full project files:
+
+```bash
+npm run workdb -- context "project or topic" --limit 12
+npm run workdb -- search "project or topic" --limit 20 --json
+npm run workdb -- show <graph-id-or-path>
+```
+
+The public site does not ship private paths or files. It includes only `assets/tag-cloud-snapshot.json`, a sanitized label-free visual snapshot generated from the private graph.
 
 Open the private graph through the local server when you want in-graph analysis buttons to run directly:
 
@@ -160,4 +179,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.8.2`
+Current version: `v0.9.0`

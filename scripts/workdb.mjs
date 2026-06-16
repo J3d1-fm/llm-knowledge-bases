@@ -1176,6 +1176,19 @@ function writeTagCloud(db) {
       padding: 0 10px;
       margin-top: 8px;
     }
+    .file-preview {
+      max-height: 260px;
+      overflow: auto;
+      margin-top: 12px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 8px;
+      background: rgba(0,0,0,0.22);
+      color: #deded8;
+      font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+      padding: 10px;
+    }
+    .file-preview[hidden] { display: none; }
     .tooltip {
       position: fixed;
       z-index: 3;
@@ -1265,12 +1278,17 @@ const colors = {
 const MIN_ZOOM = 0.08;
 const MAX_ZOOM = 3;
 const FIT_MAX_ZOOM = 1.8;
+const MOTION_AMPLITUDE = Math.PI / 180 * 2.6;
+const MOTION_PERIOD_MS = 150000;
 let width = 0;
 let height = 0;
 let scale = 1;
 let zoom = 1;
 let panX = 0;
 let panY = 0;
+let renderAngle = 0;
+let lastMotionFrame = 0;
+const motionEnabled = !window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
 let hovered = null;
 let selected = null;
 let query = "";
@@ -1363,12 +1381,24 @@ function resize() {
   canvas.height = Math.floor(height * ratio);
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 }
-function screenX(node) { return width / 2 + panX + node.x * scale * zoom; }
-function screenY(node) { return height / 2 + panY + node.y * scale * zoom; }
-function screenToWorld(x, y) {
+function rotatedWorld(node) {
+  const cos = Math.cos(renderAngle);
+  const sin = Math.sin(renderAngle);
   return {
-    x: (x - width / 2 - panX) / (scale * zoom),
-    y: (y - height / 2 - panY) / (scale * zoom)
+    x: node.x * cos - node.y * sin,
+    y: node.x * sin + node.y * cos
+  };
+}
+function screenX(node) { return width / 2 + panX + rotatedWorld(node).x * scale * zoom; }
+function screenY(node) { return height / 2 + panY + rotatedWorld(node).y * scale * zoom; }
+function screenToWorld(x, y) {
+  const rotatedX = (x - width / 2 - panX) / (scale * zoom);
+  const rotatedY = (y - height / 2 - panY) / (scale * zoom);
+  const cos = Math.cos(renderAngle);
+  const sin = Math.sin(renderAngle);
+  return {
+    x: rotatedX * cos + rotatedY * sin,
+    y: -rotatedX * sin + rotatedY * cos
   };
 }
 function publishGraphState() {
@@ -1571,8 +1601,8 @@ function drawConnectionPoints(activeIds) {
   }
   ctx.globalAlpha = 1;
 }
-function draw() {
-  tick();
+function draw(runLayout = true) {
+  if (runLayout) tick();
   ctx.clearRect(0, 0, width, height);
   const activeIds = focusedNodeIds();
 
@@ -1660,8 +1690,17 @@ function scheduleDraw() {
   drawPending = true;
   requestAnimationFrame(function() {
     drawPending = false;
-    draw();
+    draw(true);
   });
+}
+
+function animateGraph(timestamp) {
+  if (motionEnabled && !document.hidden && timestamp - lastMotionFrame > 80) {
+    lastMotionFrame = timestamp;
+    renderAngle = Math.sin((timestamp / MOTION_PERIOD_MS) * Math.PI * 2) * MOTION_AMPLITUDE;
+    draw(false);
+  }
+  requestAnimationFrame(animateGraph);
 }
 
 function nearestNode(event) {
@@ -1710,6 +1749,14 @@ function analysisPayload(node) {
   if (node.type === "tag") return { kind: "tag", id: node.label, limit: 30 };
   return null;
 }
+function contextQuery(node) {
+  if (node.type === "cluster") return clusterName(node.cluster);
+  if (node.type === "tag") return node.label;
+  return [node.label, node.path, ...(node.tags || [])].filter(Boolean).join(" ");
+}
+function nodeTarget(node) {
+  return node.id || node.path || node.label;
+}
 function renderDetails(node) {
   if (!node) return;
   inspector.hidden = false;
@@ -1719,6 +1766,7 @@ function renderDetails(node) {
   const chips = (node.tags || []).slice(0, 18).map(function(tag) { return "<span>" + escapeHtml(tag) + "</span>"; }).join("");
   const command = analysisCommand(node);
   const payload = analysisPayload(node);
+  const hasPath = Boolean(node.path);
   const totals = [
     node.fileCount ? node.fileCount + " files" : "",
     node.sessionCount ? node.sessionCount + " sessions" : "",
@@ -1738,9 +1786,12 @@ function renderDetails(node) {
     + (chips ? "<div class=\\"chips\\">" + chips + "</div>" : "")
     + "<div class=\\"actions\\">"
     + "<button type=\\"button\\" data-action=\\"focus\\">Focus graph</button>"
+    + "<button type=\\"button\\" data-action=\\"run-context\\">Context</button>"
     + (payload ? "<button type=\\"button\\" data-action=\\"run-analysis\\">Run analysis</button>" : "<button type=\\"button\\" data-action=\\"copy\\">Copy command</button>")
+    + (hasPath ? "<button type=\\"button\\" data-action=\\"preview-file\\">Preview</button><button type=\\"button\\" data-action=\\"reveal-file\\">Reveal in Finder</button>" : "")
     + "</div>"
     + "<code>" + escapeHtml(command) + "</code>"
+    + "<pre class=\\"file-preview\\" data-file-preview hidden></pre>"
     + (related.length ? "<div class=\\"related\\">" + related.map(function(item) {
         return "<button type=\\"button\\" data-node-id=\\"" + escapeHtml(item.id) + "\\"><strong>" + escapeHtml(item.label) + "</strong><span>" + escapeHtml(item.type + " · " + (item.detail || clusterName(item.cluster))) + "</span></button>";
       }).join("") + "</div>" : "");
@@ -1752,6 +1803,15 @@ function renderDetails(node) {
   });
   inspectorBody.querySelector("[data-action='run-analysis']")?.addEventListener("click", function() {
     runAnalysisFromGraph(payload, command);
+  });
+  inspectorBody.querySelector("[data-action='run-context']")?.addEventListener("click", function() {
+    runContextFromGraph(contextQuery(node));
+  });
+  inspectorBody.querySelector("[data-action='preview-file']")?.addEventListener("click", function() {
+    previewFileFromGraph(nodeTarget(node));
+  });
+  inspectorBody.querySelector("[data-action='reveal-file']")?.addEventListener("click", function() {
+    revealFileFromGraph(nodeTarget(node));
   });
   inspectorBody.querySelectorAll("[data-node-id]").forEach(function(button) {
     button.addEventListener("click", function() {
@@ -1799,6 +1859,65 @@ async function runAnalysisFromGraph(payload, fallbackCommand) {
   } catch (error) {
     showToast("Run npm run workdb -- serve to enable in-graph analysis");
     copyText(fallbackCommand);
+  }
+}
+async function runContextFromGraph(queryText) {
+  const queryValue = String(queryText || "").trim();
+  if (!queryValue) return;
+  showToast("Building context...");
+  const previousResult = inspectorBody.querySelector(".analysis-result");
+  if (previousResult) previousResult.remove();
+  try {
+    const response = await fetch("/api/context?format=json&limit=12&q=" + encodeURIComponent(queryValue));
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || "Context failed");
+    const resultBox = document.createElement("div");
+    resultBox.className = "analysis-result";
+    resultBox.innerHTML = "<strong>Context ready</strong>"
+      + "<p>" + escapeHtml(queryValue) + "</p>"
+      + "<button type=\\"button\\" data-action=\\"copy-context\\">Copy context</button>";
+    resultBox.querySelector("[data-action='copy-context']")?.addEventListener("click", function() {
+      copyText(result.markdown || "");
+    });
+    inspectorBody.prepend(resultBox);
+    showToast("Context ready");
+  } catch (error) {
+    copyText("npm run workdb -- context " + shellQuote(queryValue));
+    showToast("Run npm run workdb -- serve to enable context API");
+  }
+}
+async function previewFileFromGraph(target) {
+  const preview = inspectorBody.querySelector("[data-file-preview]");
+  if (!preview) return;
+  showToast("Loading preview...");
+  try {
+    const response = await fetch("/api/file?id=" + encodeURIComponent(target));
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || "Preview failed");
+    preview.hidden = false;
+    preview.textContent = result.content
+      ? result.content.slice(0, 22000)
+      : "No preview content available. This item may be a directory, sensitive, binary, too large, or metadata-only.";
+    showToast("Preview ready");
+  } catch (error) {
+    copyText("npm run workdb -- show " + shellQuote(target));
+    showToast("Preview API unavailable; command copied");
+  }
+}
+async function revealFileFromGraph(target) {
+  showToast("Revealing in Finder...");
+  try {
+    const response = await fetch("/api/open", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ id: target, mode: "reveal" })
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || "Reveal failed");
+    showToast("Revealed in Finder");
+  } catch (error) {
+    copyText("npm run workdb -- show " + shellQuote(target));
+    showToast("Reveal API unavailable; command copied");
   }
 }
 function showToast(message) {
@@ -1981,7 +2100,8 @@ resize();
 renderClusterRail();
 for (let i = 0; i < 340; i += 1) tick();
 fitToGraph();
-draw();
+draw(true);
+requestAnimationFrame(animateGraph);
 </script>
 </body>
 </html>`;
@@ -2245,23 +2365,37 @@ function search(flags) {
   const query = flags._.join(" ").trim().toLowerCase();
   if (!query) throw new Error("Usage: npm run workdb -- search <query> [--limit 20]");
   const limit = Number(flags.limit || 20);
-  const rows = readFileSync(filesPath, "utf8")
-    .split(/\r?\n/)
-    .filter(Boolean)
-    .map((line) => JSON.parse(line))
-    .map((row) => {
-      const haystack = [row.title, row.snippet, row.path, ...(row.tags || [])].join("\n").toLowerCase();
-      const score = query.split(/\s+/).reduce((total, term) => total + (haystack.split(term).length - 1), haystack.includes(query) ? 5 : 0);
-      return { ...row, score };
-    })
-    .filter((row) => row.score > 0)
-    .sort((left, right) => right.score - left.score || left.path.localeCompare(right.path))
-    .slice(0, limit);
+  const rows = searchIndex(query, { limit, includeSensitive: Boolean(flags["include-sensitive"]) });
   if (flags.json) return console.log(JSON.stringify(rows, null, 2));
   for (const row of rows) {
-    console.log(`${row.score}\t${row.sourceRoot}\t${row.relativePath}`);
+    console.log(`${Math.round(row.score)}\t${row.type}\t${row.sourceRoot || "db"}\t${row.relativePath || row.path}`);
     console.log(`  ${row.title}`);
     if (row.snippet) console.log(`  ${row.snippet}`);
+  }
+}
+
+function context(flags) {
+  const query = flags._.join(" ").trim();
+  if (!query) throw new Error("Usage: npm run workdb -- context <query> [--limit 12] [--json]");
+  const markdown = contextMarkdown(query, { limit: Number(flags.limit || 12) });
+  if (flags.json) return console.log(JSON.stringify({ query, markdown }, null, 2));
+  console.log(markdown);
+}
+
+function show(flags) {
+  const target = flags._.join(" ").trim();
+  if (!target) throw new Error("Usage: npm run workdb -- show <graph-id|id|path> [--json]");
+  const preview = previewIndexedTarget(target);
+  if (flags.json) return console.log(JSON.stringify(preview, null, 2));
+  console.log(`${preview.item.type}: ${preview.item.title}`);
+  if (preview.item.path) console.log(`path: ${preview.item.path}`);
+  console.log(`tags: ${preview.item.tags.join(", ") || "none"}`);
+  console.log(`sensitive: ${preview.item.sensitive ? "yes" : "no"}`);
+  if (preview.content) {
+    console.log("");
+    console.log(preview.content.slice(0, Number(flags.chars || 12000)));
+  } else {
+    console.log("No preview content available; item is a directory, sensitive, binary, too large, or metadata-only.");
   }
 }
 
@@ -2304,6 +2438,160 @@ function loadJsonl(filePath) {
       }
     })
     .filter(Boolean);
+}
+
+function normalizeTerms(query) {
+  return String(query || "")
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function indexedRows() {
+  const db = loadDb();
+  const files = loadJsonl(filesPath).map((row) => ({ type: "file", graphId: `raw:${row.id}`, ...row }));
+  const projects = (db.projects || []).map((row) => ({ type: "project", graphId: `project:${row.id}`, title: row.name, ...row }));
+  const sessions = loadJsonl(sessionsPath).map((row) => ({
+    type: "session",
+    graphId: `session:${row.system || "agent"}:${row.id}`,
+    ...row
+  }));
+  return { db, files, projects, sessions, all: [...projects, ...files, ...sessions] };
+}
+
+function scoreRow(row, query, terms) {
+  const haystack = rowText(row);
+  if (!terms.length) return 0;
+  let score = haystack.includes(query) ? 12 : 0;
+  for (const term of terms) {
+    if (!term) continue;
+    const matches = haystack.split(term).length - 1;
+    if (matches) score += matches;
+    if (String(row.title || row.name || "").toLowerCase().includes(term)) score += 3;
+    if ((row.tags || []).includes(term)) score += 5;
+    if (String(row.path || "").toLowerCase().includes(term)) score += 2;
+  }
+  if (row.type === "project") score += 3;
+  if (row.type === "session") score += 1;
+  if (row.sensitive) score *= 0.45;
+  return score;
+}
+
+function publicRow(row) {
+  return {
+    id: row.id,
+    graphId: row.graphId,
+    type: row.type,
+    title: row.title || row.name || basename(row.path || row.id || "item"),
+    path: row.path || "",
+    relativePath: row.relativePath || "",
+    sourceRoot: row.sourceRoot || "",
+    sourceLabel: row.sourceLabel || "",
+    updatedAt: row.updatedAt || "",
+    fileCount: row.fileCount || 0,
+    remote: row.remote || "",
+    extension: row.extension || "",
+    sensitive: Boolean(row.sensitive),
+    compileStatus: row.compileStatus || "",
+    tags: (row.tags || []).slice(0, 20),
+    snippet: row.sensitive ? "" : row.snippet || "",
+    score: row.score || 0
+  };
+}
+
+function searchIndex(query, options = {}) {
+  const normalizedQuery = String(query || "").trim().toLowerCase();
+  if (!normalizedQuery) return [];
+  const limit = Number(options.limit || 20);
+  const includeSensitive = Boolean(options.includeSensitive);
+  const terms = normalizeTerms(normalizedQuery);
+  return indexedRows().all
+    .filter((row) => includeSensitive || !row.sensitive)
+    .map((row) => ({ ...row, score: scoreRow(row, normalizedQuery, terms) }))
+    .filter((row) => row.score > 0)
+    .sort((left, right) => right.score - left.score || String(left.path || left.title).localeCompare(String(right.path || right.title)))
+    .slice(0, limit)
+    .map(publicRow);
+}
+
+function contextMarkdown(query, options = {}) {
+  const limit = Number(options.limit || 12);
+  const rows = searchIndex(query, { limit, includeSensitive: false });
+  const relatedTags = topRelatedTags(rows, 18);
+  const projects = rows.filter((row) => row.type === "project").slice(0, 8);
+  const files = rows.filter((row) => row.type === "file").slice(0, 12);
+  const sessions = rows.filter((row) => row.type === "session").slice(0, 8);
+  const lines = [
+    `# Work DB Context: ${query}`,
+    "",
+    `Generated: ${new Date().toISOString()}`,
+    "",
+    "Use this as a compact routing pack before opening full files. Paths are local and private.",
+    "",
+    "## Top Matches",
+    "",
+    ...(rows.length ? rows.map((row) => {
+      const pathLine = row.path ? `\n  - path: ${row.path}` : "";
+      const snippetLine = row.snippet ? `\n  - snippet: ${row.snippet}` : "";
+      return `- [${row.type}] ${row.title} (score ${Math.round(row.score)})${pathLine}\n  - tags: ${row.tags.slice(0, 10).join(", ") || "none"}${snippetLine}`;
+    }) : ["- none"]),
+    "",
+    "## Projects",
+    "",
+    ...(projects.length ? projects.map((row) => `- ${row.title}: ${row.fileCount || 0} files\n  - path: ${row.path}`) : ["- none"]),
+    "",
+    "## Evidence Files",
+    "",
+    ...(files.length ? files.map((row) => `- ${row.title}\n  - path: ${row.path}\n  - updated: ${row.updatedAt || "unknown"}\n  - status: ${row.compileStatus || "unknown"}`) : ["- none"]),
+    "",
+    "## Recent Sessions",
+    "",
+    ...(sessions.length ? sessions.map((row) => `- ${row.title}\n  - updated: ${row.updatedAt || "unknown"}\n  - path: ${row.path || "session index only"}`) : ["- none"]),
+    "",
+    "## Related Tags",
+    "",
+    ...(relatedTags.length ? relatedTags.map((item) => `- ${item.tag}: ${item.count}`) : ["- none"]),
+    "",
+    "## Follow-up Commands",
+    "",
+    `- npm run workdb -- search "${query}" --limit ${limit}`,
+    `- npm run workdb -- context "${query}" --limit ${limit}`,
+    "- npm run workdb -- tags --limit 40"
+  ];
+  return `${lines.join("\n")}\n`;
+}
+
+function resolveIndexedTarget(value) {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  const rows = indexedRows().all;
+  return rows.find((row) => {
+    return row.graphId === raw
+      || row.id === raw
+      || `raw:${row.id}` === raw
+      || `project:${row.id}` === raw
+      || `session:${row.system || "agent"}:${row.id}` === raw
+      || row.path === raw
+      || row.relativePath === raw;
+  }) || null;
+}
+
+function previewIndexedTarget(value) {
+  const row = resolveIndexedTarget(value);
+  if (!row) throw new Error(`Indexed target not found: ${value}`);
+  const stats = row.path ? safeStat(row.path) : null;
+  const isFile = Boolean(stats?.isFile());
+  const content = isFile && !row.sensitive ? readSmallText(row.path, 120000) : "";
+  return {
+    ok: true,
+    item: publicRow(row),
+    isFile,
+    isDirectory: Boolean(stats?.isDirectory()),
+    canPreview: Boolean(content),
+    content,
+    truncated: Boolean(content && stats && stats.size > Buffer.byteLength(content, "utf8"))
+  };
 }
 
 function rowText(row) {
@@ -2595,6 +2883,29 @@ function sendJson(response, statusCode, payload) {
   response.end(JSON.stringify(payload, null, 2));
 }
 
+function sendText(response, statusCode, text, contentType = "text/plain; charset=utf-8") {
+  response.writeHead(statusCode, {
+    "content-type": contentType,
+    "cache-control": "no-store"
+  });
+  response.end(text);
+}
+
+function isLocalRequest(request) {
+  const address = request.socket.remoteAddress || "";
+  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
+}
+
+function revealIndexedTarget(value, mode = "reveal") {
+  const row = resolveIndexedTarget(value);
+  if (!row || !row.path) throw new Error(`Indexed target path not found: ${value}`);
+  const stats = safeStat(row.path);
+  if (!stats) throw new Error(`Path no longer exists: ${row.path}`);
+  if (mode === "open" && stats.isFile()) execFileSync("open", [row.path], { stdio: "ignore" });
+  else execFileSync("open", ["-R", row.path], { stdio: "ignore" });
+  return { ok: true, item: publicRow(row), mode: mode === "open" && stats.isFile() ? "open" : "reveal" };
+}
+
 function serve(flags) {
   if (!existsSync(join(outputRoot, "tag-cloud.html"))) build();
   const host = String(flags.host || "127.0.0.1");
@@ -2612,8 +2923,34 @@ function serve(flags) {
         });
       }
 
+      if (request.method === "POST" && requestUrl.pathname === "/api/open") {
+        if (!isLocalRequest(request)) return sendJson(response, 403, { ok: false, error: "Open/reveal is only available from localhost." });
+        const body = await readRequestJson(request);
+        const result = revealIndexedTarget(body.id || body.path || body.graphId, body.mode || "reveal");
+        return sendJson(response, 200, result);
+      }
+
       if (request.method !== "GET" && request.method !== "HEAD") {
         return sendJson(response, 405, { ok: false, error: "Method not allowed." });
+      }
+
+      if (requestUrl.pathname === "/api/search") {
+        const query = requestUrl.searchParams.get("q") || "";
+        const limit = Number(requestUrl.searchParams.get("limit") || 20);
+        return sendJson(response, 200, { ok: true, query, results: searchIndex(query, { limit }) });
+      }
+
+      if (requestUrl.pathname === "/api/context") {
+        const query = requestUrl.searchParams.get("q") || "";
+        const limit = Number(requestUrl.searchParams.get("limit") || 12);
+        const markdown = contextMarkdown(query, { limit });
+        if (requestUrl.searchParams.get("format") === "json") return sendJson(response, 200, { ok: true, query, markdown });
+        return sendText(response, 200, markdown, "text/markdown; charset=utf-8");
+      }
+
+      if (requestUrl.pathname === "/api/file") {
+        const target = requestUrl.searchParams.get("id") || requestUrl.searchParams.get("path") || "";
+        return sendJson(response, 200, previewIndexedTarget(target));
       }
 
       const pathname = decodeURIComponent(requestUrl.pathname === "/" ? "/tag-cloud.html" : requestUrl.pathname);
@@ -2646,12 +2983,14 @@ function help() {
 Commands:
   build                 Build local private DB in outputs/global-work-kb.
   stats [--json]        Print DB counts.
-  search <query>        Search indexed files.
+  search <query>        Search indexed projects, files, and sessions.
+  context <query>       Print a compact markdown context pack for agent work.
+  show <id|path>        Show safe preview content for an indexed file/session/project.
   project <query>       Show indexed project cards.
   tags [--limit N]      Print top tags.
   analyze-tag <tag>     Write a markdown dossier for a tag.
   analyze-cluster <id>  Write a markdown dossier for a theme cluster.
-  serve [--port 8765]   Serve the private graph and local analysis API.
+  serve [--port 8765]   Serve graph, search/context/file APIs, and local reveal actions.
   refresh-external      Query GitHub, gcloud, and Firebase inventory into the DB folder.
 `);
 }
@@ -2663,6 +3002,8 @@ try {
   if (command === "build") build();
   else if (command === "stats") stats(flags);
   else if (command === "search") search(flags);
+  else if (command === "context") context(flags);
+  else if (command === "show") show(flags);
   else if (command === "project") project(flags);
   else if (command === "tags") tags(flags);
   else if (command === "analyze-tag") analyzeTag(flags);

@@ -49,8 +49,13 @@ if (!failures.length) {
     ["data-graph-zoom", "graphZoom"],
     ["const connectedNodeIds"],
     ["function drawConnectionPoints"],
+    ["function animateGraph"],
+    ["MOTION_AMPLITUDE"],
     ["window.__workGraphDebug"],
     ["Fit all"],
+    ["data-action=\\\"run-context\\\""],
+    ["data-action=\\\"preview-file\\\""],
+    ["data-action=\\\"reveal-file\\\""],
     ["analyze-cluster"],
     ["analyze-tag"]
   ];
@@ -65,6 +70,11 @@ if (!failures.length) {
   if (html.includes("Math.max(0.44") || html.includes("Math.max(0.62")) {
     failures.push("Generated graph still contains the old zoom floor that prevents a full zoom-out.");
   }
+}
+
+const workdbSource = readFileSync(join(root, "scripts", "workdb.mjs"), "utf8");
+for (const snippet of ["/api/search", "/api/context", "/api/file", "/api/open", "function contextMarkdown", "function previewIndexedTarget"]) {
+  if (!workdbSource.includes(snippet)) failures.push(`workdb server is missing required working-DB API snippet: ${snippet}`);
 }
 
 if (failures.length) {

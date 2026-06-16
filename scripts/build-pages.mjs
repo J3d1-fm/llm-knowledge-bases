@@ -1,4 +1,5 @@
 import { cpSync, mkdirSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -14,6 +15,8 @@ const siteFiles = [
   ".nojekyll",
   "assets"
 ];
+
+execFileSync("node", [join(root, "scripts", "build-public-snapshot.mjs")], { stdio: "inherit" });
 
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist, { recursive: true });

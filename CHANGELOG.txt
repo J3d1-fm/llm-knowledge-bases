@@ -1,5 +1,14 @@
 LLM Knowledge Bases Changelog
 
+Version v0.9.0 - 2026-06-16
+- Added working local DB APIs for search, context packs, safe file preview, and localhost-only Finder reveal actions.
+- Added workdb context and show CLI commands so Codex can use the private database as a fast routing/context layer before opening full source files.
+- Added graph inspector actions for Context, Preview, and Reveal in Finder when tag-cloud.html is served through npm run workdb -- serve.
+- Added a slow low-cost motion layer to the graph so the map subtly rotates without recalculating layout physics every frame.
+- Added a generated public tag-cloud snapshot for the landing page with no labels, paths, titles, or private source names.
+- Removed the old labeled hero bitmap from the landing page first viewport.
+- Added scripts/build-public-snapshot.mjs and wired it into the static build.
+
 Version v0.8.2 - 2026-06-16
 - Added a connection-point layer to the memory graph so every linked node endpoint has a visible dot.
 - Added visible center markers for theme cluster nodes, which were previously used as graph connection points without being drawn as dots.
