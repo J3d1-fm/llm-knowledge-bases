@@ -39,6 +39,11 @@ const kbSearch = document.querySelector("#kbSearch");
 const workdbMap = document.querySelector(".workdb-map");
 const workdbSnapshot = document.querySelector("#workdbSnapshot");
 const workdbMapStats = document.querySelector("#workdbMapStats");
+const workdbMapInspector = document.querySelector("#workdbMapInspector");
+const workdbMapInspectorMeta = document.querySelector("#workdbMapInspectorMeta");
+const workdbMapInspectorTitle = document.querySelector("#workdbMapInspectorTitle");
+const workdbMapInspectorBody = document.querySelector("#workdbMapInspectorBody");
+const workdbMapInspectorAction = document.querySelector("#workdbMapInspectorAction");
 
 let activeView = "workdb";
 let activeItemId = null;
@@ -46,6 +51,10 @@ let currentUser = null;
 let knowledgeBase = null;
 let workdbSnapshotData = null;
 let workdbSnapshotStarted = false;
+let workdbNodeRecords = [];
+let workdbRenderPoints = [];
+let selectedWorkdbNodeIndex = null;
+let hoveredWorkdbNodeIndex = null;
 
 const viewLabels = {
   articles: ["Articles", "Compiled wiki"],
@@ -205,6 +214,49 @@ async function loadWorkdbSnapshot() {
   }
 }
 
+function buildWorkdbNodeRecords(snapshot) {
+  const source = getCollection("workdb");
+  const byKind = new Map();
+  for (const item of source) {
+    if (!byKind.has(item.kind)) byKind.set(item.kind, []);
+    byKind.get(item.kind).push(item);
+  }
+  const cursor = new Map();
+  const kindForType = {
+    memory: "summary",
+    cluster: "cluster",
+    tag: "tag",
+    project: "project",
+    external: "external"
+  };
+
+  return (snapshot.nodes || []).map((node) => {
+    const kind = kindForType[node.t];
+    if (!kind) return null;
+    const items = byKind.get(kind) || [];
+    if (kind === "summary") return items[0] || null;
+    const index = cursor.get(kind) || 0;
+    cursor.set(kind, index + 1);
+    return items[index] || null;
+  });
+}
+
+function workdbPoint(node, width, height, timestamp) {
+  const scale = Math.min(width, height) * 0.82;
+  const offsetX = width * 0.52;
+  const offsetY = height * 0.51;
+  const angle = Math.sin(timestamp / 150000 * Math.PI * 2) * (Math.PI / 180 * 2.4);
+  const cos = Math.cos(angle);
+  const sin = Math.sin(angle);
+  const x = node.x * cos - node.y * sin;
+  const y = node.x * sin + node.y * cos;
+  return { x: offsetX + x * scale, y: offsetY + y * scale };
+}
+
+function workdbRadius(node) {
+  return Math.max(1.3, node.r * (node.t === "cluster" ? 0.4 : 0.32));
+}
+
 function drawWorkdbSnapshot(canvas, snapshot, timestamp) {
   const ratio = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
@@ -220,49 +272,186 @@ function drawWorkdbSnapshot(canvas, snapshot, timestamp) {
   ctx.clearRect(0, 0, width, height);
 
   const nodes = snapshot.nodes || [];
-  const scale = Math.min(width, height) * 0.82;
-  const offsetX = width * 0.52;
-  const offsetY = height * 0.51;
-  const angle = Math.sin(timestamp / 150000 * Math.PI * 2) * (Math.PI / 180 * 2.4);
-  const cos = Math.cos(angle);
-  const sin = Math.sin(angle);
-
-  function point(node) {
-    const x = node.x * cos - node.y * sin;
-    const y = node.x * sin + node.y * cos;
-    return { x: offsetX + x * scale, y: offsetY + y * scale };
-  }
+  workdbRenderPoints = nodes.map((node, index) => ({
+    index,
+    node,
+    point: workdbPoint(node, width, height, timestamp),
+    radius: workdbRadius(node)
+  }));
 
   ctx.lineWidth = 1;
   for (const edge of (snapshot.edges || []).slice(0, 1000)) {
-    const source = nodes[edge.s];
-    const target = nodes[edge.t];
+    const source = workdbRenderPoints[edge.s];
+    const target = workdbRenderPoints[edge.t];
     if (!source || !target) continue;
-    const a = point(source);
-    const b = point(target);
     ctx.strokeStyle = "rgba(236, 240, 234, 0.085)";
     ctx.beginPath();
-    ctx.moveTo(a.x, a.y);
-    ctx.lineTo(b.x, b.y);
+    ctx.moveTo(source.point.x, source.point.y);
+    ctx.lineTo(target.point.x, target.point.y);
     ctx.stroke();
   }
 
-  for (const node of nodes) {
-    const p = point(node);
-    const radius = Math.max(1.3, node.r * (node.t === "cluster" ? 0.4 : 0.32));
-    ctx.globalAlpha = node.t === "cluster" ? 0.76 : 0.56;
+  for (const item of workdbRenderPoints) {
+    const { index, node, point, radius } = item;
+    const isActive = index === selectedWorkdbNodeIndex;
+    const isHovered = index === hoveredWorkdbNodeIndex;
+    ctx.globalAlpha = isActive ? 0.98 : isHovered ? 0.84 : node.t === "cluster" ? 0.76 : 0.56;
     ctx.fillStyle = node.c || "#d7d7d2";
     ctx.beginPath();
-    ctx.arc(p.x, p.y, radius, 0, Math.PI * 2);
+    ctx.arc(point.x, point.y, radius + (isActive ? 1.6 : isHovered ? 1 : 0), 0, Math.PI * 2);
     ctx.fill();
   }
+
+  for (const item of workdbRenderPoints) {
+    if (item.index !== selectedWorkdbNodeIndex && item.index !== hoveredWorkdbNodeIndex) continue;
+    ctx.globalAlpha = item.index === selectedWorkdbNodeIndex ? 0.9 : 0.55;
+    ctx.strokeStyle = item.index === selectedWorkdbNodeIndex ? "rgba(107, 242, 220, 0.95)" : "rgba(244, 241, 232, 0.76)";
+    ctx.lineWidth = item.index === selectedWorkdbNodeIndex ? 2 : 1.4;
+    ctx.beginPath();
+    ctx.arc(item.point.x, item.point.y, item.radius + 7, 0, Math.PI * 2);
+    ctx.stroke();
+  }
   ctx.globalAlpha = 1;
+}
+
+function findWorkdbNodeAt(clientX, clientY) {
+  if (!workdbSnapshot || !workdbRenderPoints.length) return null;
+  const rect = workdbSnapshot.getBoundingClientRect();
+  const x = clientX - rect.left;
+  const y = clientY - rect.top;
+  let best = null;
+  for (const item of workdbRenderPoints) {
+    const dx = item.point.x - x;
+    const dy = item.point.y - y;
+    const distance = Math.hypot(dx, dy);
+    const hitRadius = Math.max(10, item.radius + 8);
+    if (distance <= hitRadius && (!best || distance < best.distance)) {
+      best = { index: item.index, distance };
+    }
+  }
+  return best?.index ?? null;
+}
+
+function renderWorkdbMapInspector(index) {
+  if (!workdbMapInspector || index === null || index === undefined) return;
+  const node = workdbSnapshotData?.nodes?.[index];
+  const record = workdbNodeRecords[index];
+  const fallback = knowledgeBase?.workdb?.find((item) => item.kind === "summary");
+  const actionRecord = record || fallback || null;
+
+  workdbMapInspector.hidden = false;
+  workdbMapInspectorMeta.textContent = record
+    ? `${record.kind || node?.t || "node"} node`
+    : `${node?.t || "index"} node`;
+  workdbMapInspectorTitle.textContent = record
+    ? getItemTitle(record)
+    : "Private index point";
+  workdbMapInspectorBody.textContent = record
+    ? getItemSummary(record)
+    : "This point exists in the private graph snapshot. The public graph keeps raw names out of the browser asset.";
+  workdbMapInspectorAction.hidden = !actionRecord;
+  workdbMapInspectorAction.textContent = record ? "Open record" : "Open summary";
+  workdbMapInspectorAction.dataset.recordId = actionRecord?.id || "";
+}
+
+function hideWorkdbMapInspector() {
+  if (!workdbMapInspector) return;
+  workdbMapInspector.hidden = true;
+  if (workdbMapInspectorAction) {
+    workdbMapInspectorAction.dataset.recordId = "";
+  }
+}
+
+function openWorkdbRecord(recordId, scroll = false) {
+  if (!recordId) return;
+  activeView = "workdb";
+  activeItemId = recordId;
+  if (kbSearch.value.trim()) {
+    kbSearch.value = "";
+  }
+  updateViewState();
+  renderList();
+  if (scroll) {
+    detailPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+}
+
+function syncWorkdbMapSelection(recordId) {
+  const index = workdbNodeRecords.findIndex((record) => record?.id === recordId);
+  selectedWorkdbNodeIndex = index >= 0 ? index : null;
+}
+
+function selectWorkdbNode(index) {
+  if (index === null || index === undefined) return;
+  selectedWorkdbNodeIndex = index;
+  renderWorkdbMapInspector(index);
+  const record = workdbNodeRecords[index];
+  if (record) {
+    openWorkdbRecord(record.id);
+  }
+}
+
+function moveWorkdbNodeSelection(step) {
+  const mappedIndexes = workdbNodeRecords
+    .map((record, index) => record ? index : null)
+    .filter((index) => index !== null);
+  if (!mappedIndexes.length) return;
+
+  const current = mappedIndexes.indexOf(selectedWorkdbNodeIndex);
+  const nextPosition = current >= 0
+    ? (current + step + mappedIndexes.length) % mappedIndexes.length
+    : step > 0 ? 0 : mappedIndexes.length - 1;
+  selectWorkdbNode(mappedIndexes[nextPosition]);
+}
+
+function bindWorkdbMapEvents() {
+  if (!workdbSnapshot || workdbSnapshot.dataset.bound === "true") return;
+  workdbSnapshot.dataset.bound = "true";
+
+  workdbSnapshot.addEventListener("mousemove", (event) => {
+    const index = findWorkdbNodeAt(event.clientX, event.clientY);
+    hoveredWorkdbNodeIndex = index;
+    workdbSnapshot.classList.toggle("is-clickable", index !== null);
+  });
+
+  workdbSnapshot.addEventListener("mouseleave", () => {
+    hoveredWorkdbNodeIndex = null;
+    workdbSnapshot.classList.remove("is-clickable");
+  });
+
+  workdbSnapshot.addEventListener("click", (event) => {
+    selectWorkdbNode(findWorkdbNodeAt(event.clientX, event.clientY));
+  });
+
+  workdbSnapshot.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+      moveWorkdbNodeSelection(1);
+      event.preventDefault();
+      return;
+    }
+    if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+      moveWorkdbNodeSelection(-1);
+      event.preventDefault();
+      return;
+    }
+    if (event.key === "Enter" || event.key === " ") {
+      const index = hoveredWorkdbNodeIndex ?? selectedWorkdbNodeIndex ?? 0;
+      selectWorkdbNode(index);
+      event.preventDefault();
+    }
+  });
 }
 
 async function startWorkdbSnapshot() {
   if (!workdbSnapshot || workdbSnapshotStarted) return;
   workdbSnapshotStarted = true;
   workdbSnapshotData = await loadWorkdbSnapshot();
+  workdbNodeRecords = buildWorkdbNodeRecords(workdbSnapshotData);
+  syncWorkdbMapSelection(activeItemId);
+  if (selectedWorkdbNodeIndex !== null) {
+    renderWorkdbMapInspector(selectedWorkdbNodeIndex);
+  }
+  bindWorkdbMapEvents();
   if (workdbMapStats) {
     const counts = workdbSnapshotData.counts || {};
     workdbMapStats.textContent = `${counts.nodes || workdbSnapshotData.nodes?.length || 0} nodes · ${counts.edges || workdbSnapshotData.edges?.length || 0} links`;
@@ -349,6 +538,14 @@ function renderList() {
 
   if (!activeItemId || !items.some((item) => item.id === activeItemId)) {
     activeItemId = items[0]?.id || null;
+  }
+  if (activeView === "workdb") {
+    syncWorkdbMapSelection(activeItemId);
+    if (workdbNodeRecords.length && selectedWorkdbNodeIndex !== null) {
+      renderWorkdbMapInspector(selectedWorkdbNodeIndex);
+    } else if (workdbNodeRecords.length) {
+      hideWorkdbMapInspector();
+    }
   }
 
   kbList.innerHTML = items.length ? items.map((item) => {
@@ -583,6 +780,10 @@ document.querySelectorAll(".kb-nav-button").forEach((button) => {
 });
 
 kbSearch.addEventListener("input", renderList);
+
+workdbMapInspectorAction?.addEventListener("click", () => {
+  openWorkdbRecord(workdbMapInspectorAction.dataset.recordId, true);
+});
 
 signInButton.addEventListener("click", async () => {
   authNote.textContent = "";

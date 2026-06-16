@@ -55,6 +55,28 @@ if (!appHtml.includes('id="workdbSnapshot"') || !appJs.includes("function startW
 }
 
 if (
+  !appHtml.includes('id="workdbMapInspector"')
+  || !appHtml.includes('id="workdbMapInspectorAction"')
+  || !appHtml.includes('tabindex="0" role="button"')
+  || !appJs.includes("function findWorkdbNodeAt")
+  || !appJs.includes("function selectWorkdbNode")
+  || !appJs.includes("function moveWorkdbNodeSelection")
+  || !appJs.includes("function renderWorkdbMapInspector")
+  || !appJs.includes("function bindWorkdbMapEvents")
+) {
+  failures.push("Authenticated Work DB graph must support clickable node inspection.");
+}
+
+if (
+  !appJs.includes("kbSearch.value = \"\";")
+  || !appJs.includes("renderWorkdbMapInspector(selectedWorkdbNodeIndex)")
+  || !appJs.includes('event.key === "ArrowRight"')
+  || !appJs.includes('event.key === "ArrowLeft"')
+) {
+  failures.push("Work DB graph interactions must reset search, sync the inspector, and support keyboard node navigation.");
+}
+
+if (
   !appJs.includes('const workdbMap = document.querySelector(".workdb-map");')
   || !appJs.includes("function updateViewState()")
   || !appJs.includes('workdbMap.hidden = activeView !== "workdb";')
@@ -73,6 +95,10 @@ if (!appJs.includes("return await response.json();") || appJs.includes("return r
 
 if (!styles.includes("[hidden]") || !styles.includes("display: none !important")) {
   failures.push("Stylesheet must preserve hidden attribute behavior for auth/workspace view switching.");
+}
+
+if (!styles.includes(".workdb-map-inspector") || !styles.includes(".workdb-map-canvas.is-clickable")) {
+  failures.push("Stylesheet must expose visible graph inspector and clickable canvas states.");
 }
 
 const forbiddenAuthGateCopy = [

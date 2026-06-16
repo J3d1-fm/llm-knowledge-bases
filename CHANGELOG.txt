@@ -1,5 +1,10 @@
 LLM Knowledge Bases Changelog
 
+Version v0.12.3 - 2026-06-16
+- Made the signed-in Work DB graph interactive with hover/click hit-testing on canvas nodes.
+- Added an active graph inspector overlay with a working Open record action for mapped remote Work DB records.
+- Synced graph node selection with the Work DB list/detail panel and extended smoke validation for clickable graph behavior.
+
 Version v0.12.2 - 2026-06-16
 - Scoped the signed-in Work DB graph so it only appears on the Work DB view, not above every workspace tab.
 - Hardened the graph snapshot fallback so malformed JSON uses the local fallback graph instead of leaving the map in a loading state.
