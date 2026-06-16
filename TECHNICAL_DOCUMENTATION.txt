@@ -1,6 +1,6 @@
 LLM Knowledge Bases Technical Documentation
 
-Version: v0.12.1
+Version: v0.12.2
 Date: 2026-06-16
 
 Purpose
@@ -165,7 +165,7 @@ Remote Work DB context:
 - It contains summary, cluster, project, tag, and external inventory cards with counts, safe tags, cluster labels, safety flags, and local Codex follow-up commands.
 - Each remote record can include a cloud context command for querying the live Firestore layer and local commands for exact private drill-down.
 - It intentionally excludes exact local paths, file snippets, file content, and git remotes. The local CLI remains the source for exact path reveal and file preview.
-- The authenticated app opens on Work DB by default, renders the label-free Work DB tag cloud snapshot, shows cloud status cards for Firestore connectivity, privacy mode, and Codex context commands, and fails clearly if workdbContext is empty or missing its summary document.
+- The authenticated app opens on Work DB by default, renders the label-free Work DB tag cloud snapshot only on the Work DB view, shows cloud status cards for Firestore connectivity, privacy mode, and Codex context commands, and fails clearly if workdbContext is empty or missing its summary document.
 
 Safety rules:
 - Secret-looking files are indexed by path, size, mtime, and sensitive flag only.
@@ -223,7 +223,7 @@ The dist artifact includes:
 - assets/
 
 Rollback
-The first releasable state is tagged as v0.1.0 in git. The first deploy-ready state is tagged as v0.1.1. The populated workspace release is tagged as v0.2.0. The markdown-vault source-of-truth release is tagged as v0.3.0. The first expanded content batch is tagged as v0.4.0. The local vault CLI release is tagged as v0.5.0. The private global work DB generator release is tagged as v0.6.0. The work DB safety patch is tagged as v0.6.1. The Hermes-style memory graph and raw/wiki/provenance outputs are tagged as v0.7.0. The clustered graph, hover magnification, and tag/cluster analysis CLI release is tagged as v0.8.0. The graph zoom-fit patch is tagged as v0.8.1. The graph connection-point patch is tagged as v0.8.2. The working DB API, agent context, motion graph, and public snapshot release is tagged as v0.9.0. The graph bend-point visibility patch is tagged as v0.9.1. The authenticated remote Work DB context release is tagged as v0.10.0. The live Firestore Work DB smoke release is tagged as v0.10.1. The graph path-vertex marker hotfix is tagged as v0.10.2. The Work DB-first authenticated workspace release is tagged as v0.11.0. The compact sign-in/security-copy patch is tagged as v0.11.1. The live Firestore cloud context CLI release is tagged as v0.12.0. The signed-in tag cloud visibility fix is intended to be tagged as v0.12.1. A rollback can restore any release tag.
+The first releasable state is tagged as v0.1.0 in git. The first deploy-ready state is tagged as v0.1.1. The populated workspace release is tagged as v0.2.0. The markdown-vault source-of-truth release is tagged as v0.3.0. The first expanded content batch is tagged as v0.4.0. The local vault CLI release is tagged as v0.5.0. The private global work DB generator release is tagged as v0.6.0. The work DB safety patch is tagged as v0.6.1. The Hermes-style memory graph and raw/wiki/provenance outputs are tagged as v0.7.0. The clustered graph, hover magnification, and tag/cluster analysis CLI release is tagged as v0.8.0. The graph zoom-fit patch is tagged as v0.8.1. The graph connection-point patch is tagged as v0.8.2. The working DB API, agent context, motion graph, and public snapshot release is tagged as v0.9.0. The graph bend-point visibility patch is tagged as v0.9.1. The authenticated remote Work DB context release is tagged as v0.10.0. The live Firestore Work DB smoke release is tagged as v0.10.1. The graph path-vertex marker hotfix is tagged as v0.10.2. The Work DB-first authenticated workspace release is tagged as v0.11.0. The compact sign-in/security-copy patch is tagged as v0.11.1. The live Firestore cloud context CLI release is tagged as v0.12.0. The signed-in tag cloud visibility fix is tagged as v0.12.1. The Work DB graph scoping patch is intended to be tagged as v0.12.2. A rollback can restore any release tag.
 
 Validation
 Run:

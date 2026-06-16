@@ -54,6 +54,23 @@ if (!appHtml.includes('id="workdbSnapshot"') || !appJs.includes("function startW
   failures.push("Authenticated workspace must render the Work DB tag cloud snapshot.");
 }
 
+if (
+  !appJs.includes('const workdbMap = document.querySelector(".workdb-map");')
+  || !appJs.includes("function updateViewState()")
+  || !appJs.includes('workdbMap.hidden = activeView !== "workdb";')
+) {
+  failures.push("Work DB graph must be scoped to the Work DB view state.");
+}
+
+const directNavStateCalls = [...appJs.matchAll(/^\s+updateNavState\(\);$/gm)].length;
+if (directNavStateCalls !== 1) {
+  failures.push("Navigation state updates must route through updateViewState except inside updateViewState itself.");
+}
+
+if (!appJs.includes("return await response.json();") || appJs.includes("return response.json();")) {
+  failures.push("Work DB graph snapshot JSON parsing must be caught by the fallback path.");
+}
+
 if (!styles.includes("[hidden]") || !styles.includes("display: none !important")) {
   failures.push("Stylesheet must preserve hidden attribute behavior for auth/workspace view switching.");
 }

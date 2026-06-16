@@ -36,6 +36,7 @@ const listTitle = document.querySelector("#listTitle");
 const kbList = document.querySelector("#kbList");
 const detailPanel = document.querySelector("#detailPanel");
 const kbSearch = document.querySelector("#kbSearch");
+const workdbMap = document.querySelector(".workdb-map");
 const workdbSnapshot = document.querySelector("#workdbSnapshot");
 const workdbMapStats = document.querySelector("#workdbMapStats");
 
@@ -86,7 +87,7 @@ async function showWorkspace(user) {
   signOutButton.hidden = false;
   activeView = "workdb";
   activeItemId = null;
-  updateNavState();
+  updateViewState();
   summaryGrid.innerHTML = `<article class="kb-stat"><span>Status</span><strong>Loading</strong></article>`;
   renderCloudStatus("loading");
   knowledgeBase = await loadKnowledgeBase();
@@ -159,7 +160,7 @@ function itemMatches(item, query) {
 function renderWorkspace() {
   vaultTitle.textContent = knowledgeBase.meta.title;
   vaultSummary.textContent = knowledgeBase.meta.summary;
-  updateNavState();
+  updateViewState();
   startWorkdbSnapshot();
   renderSummary();
   renderCloudStatus("ready");
@@ -198,7 +199,7 @@ async function loadWorkdbSnapshot() {
   try {
     const response = await fetch("assets/tag-cloud-snapshot.json", { cache: "no-store" });
     if (!response.ok) throw new Error("snapshot unavailable");
-    return response.json();
+    return await response.json();
   } catch {
     return fallbackWorkdbSnapshot();
   }
@@ -268,7 +269,9 @@ async function startWorkdbSnapshot() {
   }
   const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
   function frame(timestamp) {
-    drawWorkdbSnapshot(workdbSnapshot, workdbSnapshotData, reduceMotion ? 0 : timestamp);
+    if (!workdbMap?.hidden) {
+      drawWorkdbSnapshot(workdbSnapshot, workdbSnapshotData, reduceMotion ? 0 : timestamp);
+    }
     window.requestAnimationFrame(frame);
   }
   window.requestAnimationFrame(frame);
@@ -539,7 +542,7 @@ function renderDetail(item) {
     button.addEventListener("click", () => {
       activeView = "articles";
       activeItemId = button.dataset.linkId;
-      updateNavState();
+      updateViewState();
       renderList();
     });
   });
@@ -563,11 +566,18 @@ function updateNavState() {
   });
 }
 
+function updateViewState() {
+  updateNavState();
+  if (workdbMap) {
+    workdbMap.hidden = activeView !== "workdb";
+  }
+}
+
 document.querySelectorAll(".kb-nav-button").forEach((button) => {
   button.addEventListener("click", () => {
     activeView = button.dataset.view;
     activeItemId = null;
-    updateNavState();
+    updateViewState();
     renderList();
   });
 });

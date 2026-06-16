@@ -1,5 +1,10 @@
 LLM Knowledge Bases Changelog
 
+Version v0.12.2 - 2026-06-16
+- Scoped the signed-in Work DB graph so it only appears on the Work DB view, not above every workspace tab.
+- Hardened the graph snapshot fallback so malformed JSON uses the local fallback graph instead of leaving the map in a loading state.
+- Extended app smoke validation for Work DB graph scoping, view-state routing, and snapshot JSON fallback handling.
+
 Version v0.12.1 - 2026-06-16
 - Fixed the authenticated workspace blank-screen regression by restoring strong `[hidden]` behavior for auth/workspace view switching.
 - Added the label-free Work DB tag cloud snapshot directly to the signed-in workspace.
