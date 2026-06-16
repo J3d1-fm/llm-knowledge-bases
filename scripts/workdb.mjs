@@ -1579,26 +1579,40 @@ function connectionPointRadius(node, position, active) {
   if (node.type === "tag") return Math.max(3.7, Math.min(7.2, node.radius * 0.52)) * lensBoost;
   return Math.max(3.4, Math.min(6.2, node.radius * 0.48)) * lensBoost;
 }
-function edgeBendPoint(edge, source, target) {
+function edgeBendPoints(edge, source, target) {
   const dx = target.x - source.x;
   const dy = target.y - source.y;
   const distance = Math.hypot(dx, dy);
-  if (distance < 44) return null;
+  if (distance < 44) return [];
   const sameCluster = edge.source.cluster && edge.source.cluster === edge.target.cluster;
   const direction = hashNumber(edge.source.id + ">" + edge.target.id + ":" + edge.type) > 0.5 ? 1 : -1;
   const strength = Math.min(28, Math.max(8, distance * (sameCluster ? 0.045 : 0.062)));
-  return {
-    x: (source.x + target.x) / 2 + (-dy / distance) * strength * direction,
-    y: (source.y + target.y) / 2 + (dx / distance) * strength * direction
-  };
+  const normalX = -dy / distance;
+  const normalY = dx / distance;
+  if (distance > 220) {
+    return [0.36, 0.64].map(function(part) {
+      return {
+        x: source.x + dx * part + normalX * strength * 0.85 * direction,
+        y: source.y + dy * part + normalY * strength * 0.85 * direction
+      };
+    });
+  }
+  return [{
+    x: (source.x + target.x) / 2 + normalX * strength * direction,
+    y: (source.y + target.y) / 2 + normalY * strength * direction
+  }];
 }
 function edgePathPoints(edge) {
   const source = magnifiedPosition(edge.source);
   const target = magnifiedPosition(edge.target);
+  const bends = edgeBendPoints(edge, source, target);
+  const points = [source, ...bends, target];
   return {
     source,
-    bend: edgeBendPoint(edge, source, target),
-    target
+    bends,
+    bend: bends[0] || null,
+    target,
+    points
   };
 }
 function drawConnectionEndpoint(node, position, active, dim, degree) {
@@ -1618,12 +1632,12 @@ function drawConnectionEndpoint(node, position, active, dim, degree) {
 }
 function drawBendPoint(position, active, dim, weight) {
   const radius = Math.min(4.1, 2.35 + Math.log1p(Math.max(1, weight || 1)) * 0.22);
-  ctx.globalAlpha = dim ? 0.2 : active ? 0.72 : 0.46;
+  ctx.globalAlpha = dim ? 0.32 : active ? 0.82 : 0.58;
   ctx.fillStyle = "rgba(225,225,218,0.86)";
   ctx.beginPath();
   ctx.arc(position.x, position.y, radius, 0, Math.PI * 2);
   ctx.fill();
-  ctx.globalAlpha = dim ? 0.14 : active ? 0.42 : 0.25;
+  ctx.globalAlpha = dim ? 0.22 : active ? 0.52 : 0.34;
   ctx.strokeStyle = "rgba(255,255,255,0.68)";
   ctx.lineWidth = 0.75;
   ctx.beginPath();
@@ -1656,7 +1670,9 @@ function drawConnectionPoints(activeIds) {
       existing.degree += 1;
       endpoints.set(item.node.id, existing);
     }
-    if (path.bend) bends.push({ position: path.bend, active, dim, weight: edge.weight });
+    for (const bend of path.points.slice(1, -1)) {
+      bends.push({ position: bend, active, dim, weight: edge.weight });
+    }
   }
   for (const bend of bends) drawBendPoint(bend.position, bend.active, bend.dim, bend.weight);
   for (const point of endpoints.values()) {
@@ -1701,8 +1717,9 @@ function draw(runLayout = true) {
     ctx.globalAlpha = active ? 1 : 0.62;
     ctx.beginPath();
     ctx.moveTo(path.source.x, path.source.y);
-    if (path.bend) ctx.lineTo(path.bend.x, path.bend.y);
-    ctx.lineTo(path.target.x, path.target.y);
+    for (let index = 1; index < path.points.length; index += 1) {
+      ctx.lineTo(path.points[index].x, path.points[index].y);
+    }
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
@@ -2000,9 +2017,21 @@ function focusNode(node) {
   updateClusterRail();
   scheduleDraw();
 }
+function edgeVertexStats() {
+  let internalVertexCount = 0;
+  let twoBendEdgeCount = 0;
+  for (const edge of edges) {
+    const pointCount = edgePathPoints(edge).points.length;
+    const bendCount = Math.max(0, pointCount - 2);
+    internalVertexCount += bendCount;
+    if (bendCount > 1) twoBendEdgeCount += 1;
+  }
+  return { internalVertexCount, twoBendEdgeCount };
+}
 window.__workGraphDebug = {
   getState: function() {
     const bounds = graphBounds();
+    const vertexStats = edgeVertexStats();
     return {
       width,
       height,
@@ -2014,6 +2043,8 @@ window.__workGraphDebug = {
       panY,
       nodeCount: nodes.length,
       edgeCount: edges.length,
+      internalVertexCount: vertexStats.internalVertexCount,
+      twoBendEdgeCount: vertexStats.twoBendEdgeCount,
       clusterCount: orderedClusters.length,
       worldWidth: bounds ? bounds.worldWidth : 0,
       worldHeight: bounds ? bounds.worldHeight : 0

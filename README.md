@@ -85,7 +85,7 @@ Raw source files are the diary layer. The generated registry and chronology are 
 
 The canvas renders a readable overview graph, not all 80k+ files as individual dots. The full base remains reachable through drill-down counts, analysis reports, and JSON manifests.
 
-Every linked graph endpoint and every rendered bend vertex is marked with a connection dot, including theme-cluster centers, so lines do not terminate or turn at invisible points.
+Every linked graph endpoint and every rendered bend vertex is marked with a connection dot, including theme-cluster centers. The renderer uses one path vertex array for both line drawing and bend-dot drawing, so a line cannot turn at an unmarked internal vertex.
 
 Use `Fit all` to show the complete clustered graph in the current viewport. The `-` and `+` controls adjust zoom explicitly when a trackpad or mouse wheel is not precise enough.
 
@@ -187,4 +187,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.10.1`
+Current version: `v0.10.2`

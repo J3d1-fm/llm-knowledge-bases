@@ -1,5 +1,10 @@
 LLM Knowledge Bases Changelog
 
+Version v0.10.2 - 2026-06-16
+- Updated the private work graph renderer so edge line drawing and bend-dot drawing both use the same path vertex array.
+- Added support for two marked bend vertices on long graph links and strengthened dimmed bend markers for zoomed-out views.
+- Extended workdb graph validation and runtime debug state to require bend dots to be derived from every internal path vertex.
+
 Version v0.10.1 - 2026-06-16
 - Added a live Firestore Work DB smoke test command that validates the seeded `workdbContext` collection through Google OAuth.
 - Added cloud-data render-contract checks for Work DB counts, kinds, searchability, local Codex commands, and privacy leak boundaries.
