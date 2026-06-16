@@ -1579,25 +1579,88 @@ function connectionPointRadius(node, position, active) {
   if (node.type === "tag") return Math.max(3.7, Math.min(7.2, node.radius * 0.52)) * lensBoost;
   return Math.max(3.4, Math.min(6.2, node.radius * 0.48)) * lensBoost;
 }
+function edgeBendPoint(edge, source, target) {
+  const dx = target.x - source.x;
+  const dy = target.y - source.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance < 44) return null;
+  const sameCluster = edge.source.cluster && edge.source.cluster === edge.target.cluster;
+  const direction = hashNumber(edge.source.id + ">" + edge.target.id + ":" + edge.type) > 0.5 ? 1 : -1;
+  const strength = Math.min(28, Math.max(8, distance * (sameCluster ? 0.045 : 0.062)));
+  return {
+    x: (source.x + target.x) / 2 + (-dy / distance) * strength * direction,
+    y: (source.y + target.y) / 2 + (dx / distance) * strength * direction
+  };
+}
+function edgePathPoints(edge) {
+  const source = magnifiedPosition(edge.source);
+  const target = magnifiedPosition(edge.target);
+  return {
+    source,
+    bend: edgeBendPoint(edge, source, target),
+    target
+  };
+}
+function drawConnectionEndpoint(node, position, active, dim, degree) {
+  const radius = connectionPointRadius(node, position, active) + Math.min(1.8, Math.log1p(Math.max(0, degree - 1)) * 0.42);
+  const color = node.color || colors[node.type] || "#d5d5d0";
+  ctx.globalAlpha = dim ? 0.36 : active ? 0.98 : 0.84;
+  ctx.fillStyle = node.type === "cluster" ? "rgba(238,238,232,0.9)" : color;
+  ctx.beginPath();
+  ctx.arc(position.x, position.y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = dim ? 0.24 : active ? 0.64 : 0.42;
+  ctx.strokeStyle = "rgba(255,255,255,0.74)";
+  ctx.lineWidth = node.type === "cluster" ? 1.2 : 0.85;
+  ctx.beginPath();
+  ctx.arc(position.x, position.y, radius + (node.type === "cluster" ? 3.8 : 2.3), 0, Math.PI * 2);
+  ctx.stroke();
+}
+function drawBendPoint(position, active, dim, weight) {
+  const radius = Math.min(4.1, 2.35 + Math.log1p(Math.max(1, weight || 1)) * 0.22);
+  ctx.globalAlpha = dim ? 0.2 : active ? 0.72 : 0.46;
+  ctx.fillStyle = "rgba(225,225,218,0.86)";
+  ctx.beginPath();
+  ctx.arc(position.x, position.y, radius, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.globalAlpha = dim ? 0.14 : active ? 0.42 : 0.25;
+  ctx.strokeStyle = "rgba(255,255,255,0.68)";
+  ctx.lineWidth = 0.75;
+  ctx.beginPath();
+  ctx.arc(position.x, position.y, radius + 2.1, 0, Math.PI * 2);
+  ctx.stroke();
+}
 function drawConnectionPoints(activeIds) {
-  for (const node of nodes) {
-    if (!connectedNodeIds.has(node.id)) continue;
-    const active = connectionPointActive(node, activeIds);
+  const endpoints = new Map();
+  const bends = [];
+  for (const edge of edges) {
+    const path = edgePathPoints(edge);
+    const active = edgeActive(edge, activeIds);
     const dim = activeIds.size && !active;
-    const pos = magnifiedPosition(node);
-    const radius = connectionPointRadius(node, pos, active);
-    const color = node.color || colors[node.type] || "#d5d5d0";
-    ctx.globalAlpha = dim ? 0.22 : active ? 0.98 : 0.74;
-    ctx.fillStyle = node.type === "cluster" ? "rgba(238,238,232,0.88)" : color;
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.globalAlpha = dim ? 0.16 : active ? 0.6 : 0.34;
-    ctx.strokeStyle = "rgba(255,255,255,0.72)";
-    ctx.lineWidth = node.type === "cluster" ? 1.2 : 0.8;
-    ctx.beginPath();
-    ctx.arc(pos.x, pos.y, radius + (node.type === "cluster" ? 3.8 : 2.2), 0, Math.PI * 2);
-    ctx.stroke();
+    for (const item of [
+      { node: edge.source, position: path.source },
+      { node: edge.target, position: path.target }
+    ]) {
+      if (!connectedNodeIds.has(item.node.id)) continue;
+      const pointActive = active || connectionPointActive(item.node, activeIds);
+      const existing = endpoints.get(item.node.id) || {
+        node: item.node,
+        position: item.position,
+        active: false,
+        dim: Boolean(activeIds.size),
+        degree: 0
+      };
+      existing.position = item.position;
+      existing.active = existing.active || pointActive;
+      existing.dim = existing.dim && dim && !pointActive;
+      existing.degree += 1;
+      endpoints.set(item.node.id, existing);
+    }
+    if (path.bend) bends.push({ position: path.bend, active, dim, weight: edge.weight });
+  }
+  for (const bend of bends) drawBendPoint(bend.position, bend.active, bend.dim, bend.weight);
+  for (const point of endpoints.values()) {
+    drawConnectionEndpoint(point.node, point.position, point.active, point.dim, point.degree);
   }
   ctx.globalAlpha = 1;
 }
@@ -1633,18 +1696,16 @@ function draw(runLayout = true) {
   ctx.lineWidth = 1;
   for (const edge of edges) {
     const active = edgeActive(edge, activeIds);
-    const source = magnifiedPosition(edge.source);
-    const target = magnifiedPosition(edge.target);
+    const path = edgePathPoints(edge);
     ctx.strokeStyle = active ? "rgba(220,220,216,0.24)" : "rgba(190,190,186,0.045)";
     ctx.globalAlpha = active ? 1 : 0.62;
     ctx.beginPath();
-    ctx.moveTo(source.x, source.y);
-    ctx.lineTo(target.x, target.y);
+    ctx.moveTo(path.source.x, path.source.y);
+    if (path.bend) ctx.lineTo(path.bend.x, path.bend.y);
+    ctx.lineTo(path.target.x, path.target.y);
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
-
-  drawConnectionPoints(activeIds);
 
   for (const node of nodes) {
     if (node.type === "cluster") continue;
@@ -1674,6 +1735,8 @@ function draw(runLayout = true) {
       ctx.fillText(node.label.slice(0, 34), pos.x + radius + 7, pos.y + 4);
     }
   }
+
+  drawConnectionPoints(activeIds);
 
   if (pointer.inside) {
     const lensRadius = Math.min(170, Math.max(110, Math.min(width, height) * 0.14));

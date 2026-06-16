@@ -1,5 +1,11 @@
 LLM Knowledge Bases Changelog
 
+Version v0.9.1 - 2026-06-16
+- Updated the private work graph line renderer so long links use deterministic bend vertices instead of plain source-to-target strokes.
+- Added visible bend-point markers and stronger endpoint markers so every rendered link vertex has a dot, including zoomed-out and dimmed graph states.
+- Moved connection markers above the node layer so they do not disappear under later canvas drawing.
+- Updated workdb graph validation to require the bend-point rendering layer.
+
 Version v0.9.0 - 2026-06-16
 - Added working local DB APIs for search, context packs, safe file preview, and localhost-only Finder reveal actions.
 - Added workdb context and show CLI commands so Codex can use the private database as a fast routing/context layer before opening full source files.
