@@ -47,6 +47,8 @@ if (!failures.length) {
     ["function scheduleDraw"],
     ["const MIN_ZOOM = 0.08"],
     ["data-graph-zoom", "graphZoom"],
+    ["const connectedNodeIds"],
+    ["function drawConnectionPoints"],
     ["window.__workGraphDebug"],
     ["Fit all"],
     ["analyze-cluster"],

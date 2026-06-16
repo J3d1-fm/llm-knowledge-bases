@@ -1,5 +1,10 @@
 LLM Knowledge Bases Changelog
 
+Version v0.8.2 - 2026-06-16
+- Added a connection-point layer to the memory graph so every linked node endpoint has a visible dot.
+- Added visible center markers for theme cluster nodes, which were previously used as graph connection points without being drawn as dots.
+- Updated workdb graph validation to require the connection-point layer in generated graph HTML.
+
 Version v0.8.1 - 2026-06-16
 - Fixed the memory graph zoom-out floor so the full clustered map can fit on screen.
 - Renamed the graph fit control to Fit all and added explicit zoom out / zoom in buttons.

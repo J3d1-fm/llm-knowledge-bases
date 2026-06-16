@@ -1341,6 +1341,7 @@ for (const edge of edges) {
   adjacency.get(edge.source.id)?.add(edge.target.id);
   adjacency.get(edge.target.id)?.add(edge.source.id);
 }
+const connectedNodeIds = new Set(edges.flatMap(function(edge) { return [edge.source.id, edge.target.id]; }));
 
 function radiusFor(node) {
   const weight = Math.max(1, Number(node.weight || 1));
@@ -1536,6 +1537,40 @@ function clusterActive(clusterId, ids) {
   }
   return false;
 }
+function connectionPointActive(node, ids) {
+  if (selected === node || hovered === node || isMatched(node)) return true;
+  if (node.type === "cluster") return clusterActive(node.cluster, ids);
+  return nodeActive(node, ids);
+}
+function connectionPointRadius(node, position, active) {
+  const lensBoost = 1 + position.amount * 1.35;
+  if (node.type === "cluster") return (active ? 5.2 : 4.2) * lensBoost;
+  if (node.type === "raw" || node.type === "session") return (active ? 3.7 : 3.1) * lensBoost;
+  if (node.type === "tag") return Math.max(3.7, Math.min(7.2, node.radius * 0.52)) * lensBoost;
+  return Math.max(3.4, Math.min(6.2, node.radius * 0.48)) * lensBoost;
+}
+function drawConnectionPoints(activeIds) {
+  for (const node of nodes) {
+    if (!connectedNodeIds.has(node.id)) continue;
+    const active = connectionPointActive(node, activeIds);
+    const dim = activeIds.size && !active;
+    const pos = magnifiedPosition(node);
+    const radius = connectionPointRadius(node, pos, active);
+    const color = node.color || colors[node.type] || "#d5d5d0";
+    ctx.globalAlpha = dim ? 0.22 : active ? 0.98 : 0.74;
+    ctx.fillStyle = node.type === "cluster" ? "rgba(238,238,232,0.88)" : color;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = dim ? 0.16 : active ? 0.6 : 0.34;
+    ctx.strokeStyle = "rgba(255,255,255,0.72)";
+    ctx.lineWidth = node.type === "cluster" ? 1.2 : 0.8;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, radius + (node.type === "cluster" ? 3.8 : 2.2), 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+}
 function draw() {
   tick();
   ctx.clearRect(0, 0, width, height);
@@ -1578,6 +1613,8 @@ function draw() {
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
+
+  drawConnectionPoints(activeIds);
 
   for (const node of nodes) {
     if (node.type === "cluster") continue;
