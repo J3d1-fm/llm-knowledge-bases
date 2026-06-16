@@ -9,6 +9,7 @@ import {
 } from "node:fs";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { createServer } from "node:http";
 import { basename, dirname, extname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -540,6 +541,83 @@ function lineDelimited(rows) {
   return `${rows.map((row) => JSON.stringify(row)).join("\n")}\n`;
 }
 
+const themeClusters = [
+  {
+    id: "agent-memory",
+    label: "Agent memory",
+    color: "#f2f2f2",
+    tags: ["memory", "session", "codex", "claude", "skill", "tasks", "automation", "telegram", "tracker", "personal"]
+  },
+  {
+    id: "data-dashboards",
+    label: "Data and dashboards",
+    color: "#95b8ff",
+    tags: ["data", "analytics", "dashboard", "reports", "mmp", "universalmmp", "universal", "proas", "pdmx", "drive-zone"]
+  },
+  {
+    id: "growth-creative",
+    label: "Growth and creative",
+    color: "#f4c46d",
+    tags: ["ads", "creative", "digital-racers", "jet"]
+  },
+  {
+    id: "cloud-auth",
+    label: "Cloud and auth",
+    color: "#78ddc4",
+    tags: ["firebase", "firestore", "gcloud", "github", "google", "gmail", "slack", "project-google-accounts"]
+  },
+  {
+    id: "products-apps",
+    label: "Products and apps",
+    color: "#d7a7ff",
+    tags: ["ios", "web", "piano", "budget", "teleprompter"]
+  },
+  {
+    id: "docs-legal",
+    label: "Docs and legal",
+    color: "#ff9e7d",
+    tags: ["docs", "legal", "cases2win"]
+  },
+  {
+    id: "other-work",
+    label: "Other work",
+    color: "#b0b0b0",
+    tags: []
+  }
+];
+
+const clusterById = new Map(themeClusters.map((cluster) => [cluster.id, cluster]));
+const clusterByTag = new Map(themeClusters.flatMap((cluster) => cluster.tags.map((tag) => [tag, cluster])));
+
+function clusterForTag(tag) {
+  return clusterByTag.get(tag)?.id || "other-work";
+}
+
+function clusterForTags(tags = [], fallbackText = "") {
+  const scores = new Map();
+  for (const tag of tags) {
+    const clusterId = clusterForTag(tag);
+    scores.set(clusterId, (scores.get(clusterId) || 0) + 1);
+  }
+
+  const lower = fallbackText.toLowerCase();
+  for (const cluster of themeClusters) {
+    for (const tag of cluster.tags) {
+      if (lower.includes(tag)) scores.set(cluster.id, (scores.get(cluster.id) || 0) + 0.5);
+    }
+  }
+
+  return [...scores.entries()].sort((left, right) => right[1] - left[1])[0]?.[0] || "other-work";
+}
+
+function clusterLabel(clusterId) {
+  return clusterById.get(clusterId)?.label || clusterId;
+}
+
+function clusterColor(clusterId) {
+  return clusterById.get(clusterId)?.color || "#b0b0b0";
+}
+
 function buildGraphData(tags, projects, external, files = [], codexSessions = [], claudeSessions = []) {
   const nodes = [];
   const edges = [];
@@ -547,6 +625,39 @@ function buildGraphData(tags, projects, external, files = [], codexSessions = []
   const edgeIds = new Set();
   const topTags = tags.slice(0, 52);
   const topTagSet = new Set(topTags.map((item) => item.tag));
+  const filesByTopTag = new Map(topTags.map((tag) => [tag.tag, 0]));
+  const sessionsByTopTag = new Map(topTags.map((tag) => [tag.tag, 0]));
+  for (const file of files) {
+    for (const tag of file.tags || []) {
+      if (filesByTopTag.has(tag)) filesByTopTag.set(tag, filesByTopTag.get(tag) + 1);
+    }
+  }
+  for (const session of [...codexSessions, ...claudeSessions]) {
+    for (const tag of session.tags || []) {
+      if (sessionsByTopTag.has(tag)) sessionsByTopTag.set(tag, sessionsByTopTag.get(tag) + 1);
+    }
+  }
+  const clusterStats = new Map();
+
+  for (const tag of topTags) {
+    const clusterId = clusterForTag(tag.tag);
+    const stat = clusterStats.get(clusterId) || { id: clusterId, count: 0, tags: [] };
+    stat.count += tag.count;
+    stat.tags.push(tag.tag);
+    clusterStats.set(clusterId, stat);
+  }
+
+  if (!clusterStats.size) {
+    clusterStats.set("other-work", { id: "other-work", count: 1, tags: [] });
+  }
+
+  const graphClusters = [...clusterStats.values()]
+    .map((cluster) => ({
+      ...cluster,
+      label: clusterLabel(cluster.id),
+      color: clusterColor(cluster.id)
+    }))
+    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
 
   function addNode(node) {
     if (nodeIds.has(node.id)) return false;
@@ -567,19 +678,39 @@ function buildGraphData(tags, projects, external, files = [], codexSessions = []
     id: "memory:lens",
     label: "Agent memory",
     type: "memory",
+    cluster: "agent-memory",
     weight: 99999,
     detail: "Raw diary, live catalog, provenance, projects, repos, cloud resources, and agent sessions"
   });
 
+  for (const cluster of graphClusters) {
+    addNode({
+      id: `cluster:${cluster.id}`,
+      label: cluster.label,
+      type: "cluster",
+      cluster: cluster.id,
+      weight: cluster.count,
+      detail: `${cluster.tags.length} tags · ${cluster.count} indexed records`,
+      tags: cluster.tags,
+      color: cluster.color
+    });
+    addEdge("memory:lens", `cluster:${cluster.id}`, Math.min(8, Math.max(2, cluster.count / 8000)), "memory-cluster");
+  }
+
   for (const tag of topTags) {
+    const clusterId = clusterForTag(tag.tag);
     addNode({
       id: `tag:${tag.tag}`,
       label: tag.tag,
       type: "tag",
+      cluster: clusterId,
       weight: tag.count,
-      detail: `${tag.count} indexed records`
+      detail: `${tag.count} indexed records`,
+      totalRecords: tag.count,
+      fileCount: filesByTopTag.get(tag.tag) || 0,
+      sessionCount: sessionsByTopTag.get(tag.tag) || 0
     });
-    addEdge("memory:lens", `tag:${tag.tag}`, Math.min(6, Math.max(1, tag.count / 6000)), "memory-tag");
+    addEdge(`cluster:${clusterId}`, `tag:${tag.tag}`, Math.min(6, Math.max(1, tag.count / 5000)), "cluster-tag");
   }
 
   const selectedProjects = projects
@@ -589,16 +720,21 @@ function buildGraphData(tags, projects, external, files = [], codexSessions = []
 
   for (const project of selectedProjects) {
     const projectTags = (project.tags || []).filter((tag) => topTagSet.has(tag)).slice(0, 10);
+    const projectCluster = clusterForTags(projectTags.length ? projectTags : project.tags, project.name);
     addNode({
       id: `project:${project.id}`,
       label: project.name,
       type: "project",
+      cluster: projectCluster,
       weight: Math.max(1, project.fileCount),
       detail: `${project.fileCount} indexed files`,
+      fileCount: project.fileCount,
+      totalBytes: project.totalBytes,
       path: project.path,
       remote: project.remote,
       tags: projectTags
     });
+    addEdge(`cluster:${projectCluster}`, `project:${project.id}`, 1.5, "cluster-project");
     for (const tag of projectTags) addEdge(`project:${project.id}`, `tag:${tag}`, 2, "project-tag");
   }
 
@@ -615,14 +751,19 @@ function buildGraphData(tags, projects, external, files = [], codexSessions = []
   let includedRaw = 0;
   for (const file of rawNodes) {
     const fileTags = (file.tags || []).filter((tag) => topTagSet.has(tag)).slice(0, 4);
+    const fileCluster = clusterForTags(fileTags, `${file.title || ""} ${file.path || ""}`);
     const fileId = `raw:${file.id}`;
     const inserted = addNode({
       id: fileId,
       label: file.title || basename(file.path),
       type: "raw",
+      cluster: fileCluster,
       weight: 1,
       detail: `${file.sourceLabel || file.sourceRoot} · ${file.extension || "file"}`,
       path: file.path,
+      updatedAt: file.updatedAt,
+      compileStatus: file.compileStatus,
+      sensitive: file.sensitive,
       tags: fileTags
     });
     if (!inserted) continue;
@@ -637,6 +778,7 @@ function buildGraphData(tags, projects, external, files = [], codexSessions = []
     id: "system:codex-sessions",
     label: "Codex sessions",
     type: "system",
+    cluster: "agent-memory",
     weight: Math.max(1, codexSessions.length),
     detail: "Indexed Codex session titles and timestamps"
   });
@@ -644,6 +786,7 @@ function buildGraphData(tags, projects, external, files = [], codexSessions = []
     id: "system:claude",
     label: "Claude files",
     type: "system",
+    cluster: "agent-memory",
     weight: Math.max(1, claudeSessions.length),
     detail: "Indexed Claude sessions, tasks, and project notes"
   });
@@ -659,13 +802,16 @@ function buildGraphData(tags, projects, external, files = [], codexSessions = []
     .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")))
     .slice(0, 140)) {
     const sessionTags = (session.tags || []).filter((tag) => topTagSet.has(tag)).slice(0, 4);
+    const sessionCluster = clusterForTags(sessionTags, session.title || "");
     const sessionId = `session:codex:${session.id || stableId(session.title)}`;
     const inserted = addNode({
       id: sessionId,
       label: session.title || session.id,
       type: "session",
+      cluster: sessionCluster,
       weight: 1,
       detail: session.updatedAt || "Codex session",
+      updatedAt: session.updatedAt,
       tags: sessionTags
     });
     if (!inserted) continue;
@@ -679,14 +825,17 @@ function buildGraphData(tags, projects, external, files = [], codexSessions = []
     .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")))
     .slice(0, 40)) {
     const sessionTags = (session.tags || []).filter((tag) => topTagSet.has(tag)).slice(0, 4);
+    const sessionCluster = clusterForTags(sessionTags, session.title || "");
     const sessionId = `session:claude:${session.id || stableId(session.title)}`;
     const inserted = addNode({
       id: sessionId,
       label: session.title || session.id,
       type: "session",
+      cluster: sessionCluster,
       weight: 1,
       detail: session.updatedAt || "Claude session",
       path: session.path || "",
+      updatedAt: session.updatedAt,
       tags: sessionTags
     });
     if (!inserted) continue;
@@ -700,6 +849,7 @@ function buildGraphData(tags, projects, external, files = [], codexSessions = []
     id: "external:github",
     label: "GitHub",
     type: "external",
+    cluster: "cloud-auth",
     weight: Math.max(1, githubRepos.length),
     detail: `${githubRepos.length} repositories`
   });
@@ -714,6 +864,7 @@ function buildGraphData(tags, projects, external, files = [], codexSessions = []
       id: repoId,
       label: repoName,
       type: "repo",
+      cluster: "cloud-auth",
       weight: Number(repo.size || 1) + 1,
       detail: repo.full_name || "GitHub repo",
       url: repo.html_url || ""
@@ -730,6 +881,7 @@ function buildGraphData(tags, projects, external, files = [], codexSessions = []
     id: "external:gcloud",
     label: "GCloud",
     type: "external",
+    cluster: "cloud-auth",
     weight: Math.max(1, gcloudProjects.length),
     detail: `${gcloudProjects.length} Google Cloud projects`
   });
@@ -743,6 +895,7 @@ function buildGraphData(tags, projects, external, files = [], codexSessions = []
       id: cloudId,
       label: projectId,
       type: "cloud",
+      cluster: "cloud-auth",
       weight: 10,
       detail: project.name || "Google Cloud project"
     });
@@ -755,6 +908,7 @@ function buildGraphData(tags, projects, external, files = [], codexSessions = []
     id: "external:firebase",
     label: "Firebase",
     type: "external",
+    cluster: "cloud-auth",
     weight: Math.max(1, firebaseProjects.length),
     detail: `${firebaseProjects.length} Firebase projects`
   });
@@ -768,6 +922,7 @@ function buildGraphData(tags, projects, external, files = [], codexSessions = []
       id: firebaseId,
       label: project.displayName || projectId,
       type: "firebase",
+      cluster: "cloud-auth",
       weight: 12,
       detail: project.projectId || "Firebase project"
     });
@@ -778,16 +933,21 @@ function buildGraphData(tags, projects, external, files = [], codexSessions = []
   const linkedNodeIds = new Set(edges.flatMap((edge) => [edge.source, edge.target]));
   return {
     generatedAt: new Date().toISOString(),
+    clusters: graphClusters,
     nodes: nodes.filter((node) => linkedNodeIds.has(node.id) || node.type === "project"),
     edges,
     counts: {
       projects: selectedProjects.length,
       tags: topTags.length,
+      clusters: graphClusters.length,
       raw: includedRaw,
       sessions: includedSessions,
       repos: githubRepos.length,
       gcloudProjects: gcloudProjects.length,
-      firebaseProjects: firebaseProjects.length
+      firebaseProjects: firebaseProjects.length,
+      totalFiles: files.length,
+      totalCodexSessions: codexSessions.length,
+      totalClaudeSessions: claudeSessions.length
     }
   };
 }
@@ -800,53 +960,61 @@ function writeTagCloud(db) {
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Global Work Knowledge Graph</title>
+  <title>Global Work Tag Graph</title>
   <style>
     :root {
       color-scheme: dark;
-      --bg: #242424;
-      --panel: rgba(28, 28, 28, 0.78);
+      --bg: #202120;
+      --panel: rgba(25, 26, 25, 0.76);
+      --panel-strong: rgba(20, 21, 20, 0.92);
       --panel-border: rgba(255, 255, 255, 0.1);
-      --text: #e8e8e8;
-      --muted: #a0a0a0;
-      --line: rgba(198, 198, 198, 0.13);
+      --text: #efefec;
+      --muted: #a7aaa7;
+      --line: rgba(210, 210, 205, 0.13);
     }
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; }
     body {
       margin: 0;
       overflow: hidden;
-      font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: 13px/1.4 Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       background: var(--bg);
       color: var(--text);
     }
-    canvas { width: 100vw; height: 100vh; display: block; background: radial-gradient(circle at 34% 46%, #303030 0, #262626 36%, #222 100%); }
+    canvas {
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      background:
+        radial-gradient(circle at 36% 47%, rgba(66,66,64,0.72) 0, rgba(46,47,45,0.84) 32%, rgba(34,35,34,1) 68%),
+        #202120;
+    }
     .panel {
       position: fixed;
       z-index: 2;
-      background: var(--panel);
       border: 1px solid var(--panel-border);
-      backdrop-filter: blur(12px);
       border-radius: 10px;
+      background: var(--panel);
       box-shadow: 0 18px 50px rgba(0, 0, 0, 0.24);
+      backdrop-filter: blur(12px);
     }
     .topbar {
-      left: 18px;
-      top: 18px;
+      left: 16px;
+      top: 16px;
       display: flex;
-      gap: 10px;
+      max-width: calc(100vw - 32px);
       align-items: center;
-      padding: 10px;
-      max-width: calc(100vw - 36px);
+      gap: 8px;
+      padding: 8px;
     }
     .title {
+      min-width: 260px;
       padding: 0 8px;
-      min-width: 220px;
     }
-    .title strong { display: block; font-size: 14px; letter-spacing: 0; }
-    .title span { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; }
+    .title strong { display: block; font-size: 13px; letter-spacing: 0; }
+    .title span { display: block; color: var(--muted); font-size: 11px; white-space: nowrap; }
     input {
-      width: min(34vw, 360px);
+      width: min(31vw, 340px);
       min-width: 180px;
       height: 34px;
       border: 1px solid rgba(255,255,255,0.14);
@@ -862,116 +1030,296 @@ function writeTagCloud(db) {
       border-radius: 8px;
       background: rgba(255,255,255,0.08);
       color: var(--text);
+      font: inherit;
       padding: 0 12px;
       cursor: pointer;
     }
-    button:hover, input:focus { border-color: rgba(255,255,255,0.3); }
-    .legend {
-      left: 18px;
-      bottom: 18px;
-      padding: 12px 14px;
-      display: grid;
-      gap: 7px;
-      min-width: 190px;
+    button:hover,
+    button:focus-visible,
+    input:focus {
+      border-color: rgba(255,255,255,0.34);
+      outline: none;
     }
-    .legend div { display: flex; align-items: center; gap: 8px; color: var(--muted); }
-    .dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
-    .details {
-      right: 18px;
-      top: 18px;
-      width: min(360px, calc(100vw - 36px));
-      padding: 16px;
-      max-height: calc(100vh - 36px);
+    .cluster-rail {
+      right: 16px;
+      top: 82px;
+      display: flex;
+      width: min(210px, calc(100vw - 32px));
+      flex-direction: column;
+      gap: 6px;
+      padding: 8px;
+      background: rgba(25, 26, 25, 0.52);
+    }
+    .cluster-button {
+      height: 30px;
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      color: var(--muted);
+      padding: 0 9px;
+    }
+    .cluster-button.is-active {
+      color: var(--text);
+      background: rgba(255,255,255,0.13);
+    }
+    .swatch { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+    .inspector {
+      right: 16px;
+      top: 16px;
+      display: grid;
+      width: min(400px, calc(100vw - 32px));
+      max-height: calc(100vh - 32px);
+      grid-template-rows: auto minmax(0, 1fr);
+      overflow: hidden;
+      background: var(--panel-strong);
+    }
+    .inspector[hidden] { display: none; }
+    .inspector-head {
+      display: flex;
+      justify-content: space-between;
+      gap: 12px;
+      border-bottom: 1px solid var(--line);
+      padding: 14px 14px 10px;
+    }
+    .inspector-body {
+      padding: 14px;
       overflow: auto;
     }
-    .details h2 { margin: 0 0 6px; font-size: 18px; line-height: 1.2; }
-    .details p { margin: 8px 0 0; color: var(--muted); }
-    .details code { display: block; white-space: pre-wrap; word-break: break-word; margin-top: 10px; color: #cfcfcf; font-size: 12px; }
-    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
-    .chips span { border: 1px solid rgba(255,255,255,0.12); border-radius: 999px; padding: 3px 8px; color: #cfcfcf; }
+    .eyebrow {
+      margin: 0;
+      color: var(--muted);
+      font-size: 11px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .inspector h2 {
+      margin: 2px 0 5px;
+      font-size: 19px;
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+    .inspector p { margin: 8px 0 0; color: var(--muted); }
+    .inspector code {
+      display: block;
+      white-space: pre-wrap;
+      word-break: break-word;
+      margin-top: 10px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 7px;
+      background: rgba(255,255,255,0.05);
+      color: #d8d8d8;
+      font-size: 12px;
+      padding: 8px;
+    }
+    .close-button {
+      width: 32px;
+      min-width: 32px;
+      padding: 0;
+      color: var(--muted);
+    }
+    .meta-row,
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 10px;
+    }
+    .meta-row span,
+    .chips span {
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 999px;
+      padding: 3px 8px;
+      color: #cfcfcf;
+      font-size: 12px;
+    }
+    .actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    .actions button { width: 100%; }
+    .related {
+      display: grid;
+      gap: 6px;
+      margin-top: 14px;
+    }
+    .related button {
+      height: auto;
+      min-height: 34px;
+      text-align: left;
+      padding: 8px 9px;
+      color: var(--muted);
+    }
+    .related strong {
+      display: block;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 650;
+    }
+    .related span { display: block; font-size: 11px; }
+    .analysis-result {
+      margin-top: 12px;
+      border: 1px solid rgba(120, 221, 196, 0.22);
+      border-radius: 8px;
+      background: rgba(120, 221, 196, 0.07);
+      padding: 10px;
+    }
+    .analysis-result a {
+      display: inline-flex;
+      min-height: 32px;
+      align-items: center;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 8px;
+      color: var(--text);
+      text-decoration: none;
+      padding: 0 10px;
+      margin-top: 8px;
+    }
     .tooltip {
       position: fixed;
       z-index: 3;
       pointer-events: none;
-      padding: 6px 8px;
+      display: none;
+      max-width: 280px;
+      transform: translate(12px, 12px);
+      border: 1px solid rgba(255,255,255,0.12);
       border-radius: 7px;
       background: rgba(12,12,12,0.88);
       color: #f0f0f0;
-      border: 1px solid rgba(255,255,255,0.12);
-      transform: translate(12px, 12px);
+      padding: 6px 8px;
+    }
+    .status-toast {
+      position: fixed;
+      right: 16px;
+      bottom: 16px;
+      z-index: 4;
       display: none;
-      max-width: 260px;
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 9px;
+      background: rgba(12,12,12,0.9);
+      color: #f0f0f0;
+      padding: 9px 11px;
     }
     @media (max-width: 760px) {
       .topbar { right: 12px; left: 12px; top: 12px; flex-wrap: wrap; }
       .title { width: 100%; }
-      input { width: calc(100vw - 136px); min-width: 0; }
-      .details { display: none; }
-      .legend { display: none; }
+      input { width: calc(100vw - 176px); min-width: 0; }
+      .cluster-rail { left: 12px; right: 12px; top: auto; bottom: 12px; width: auto; max-height: 112px; overflow: auto; }
+      .inspector { inset: auto 12px 12px; top: auto; width: auto; max-height: min(58vh, 520px); }
     }
   </style>
 </head>
 <body>
 <canvas id="graph"></canvas>
 <div class="panel topbar">
-  <div class="title"><strong>Global Work Graph</strong><span>${graph.nodes.length} nodes · ${graph.edges.length} links · ${escapeHtml(graph.generatedAt)}</span></div>
-  <input id="search" type="search" placeholder="Search project, tag, repo">
+  <div class="title"><strong>Global Work Tag Graph</strong><span>${graph.counts.clusters} clusters · ${graph.nodes.length} visible nodes · ${graph.counts.totalFiles} files · ${graph.edges.length} links</span></div>
+  <input id="search" type="search" placeholder="Search tag, cluster, project, repo">
+  <button id="fit" type="button">Fit</button>
   <button id="reset" type="button">Reset</button>
 </div>
-<aside class="panel details" id="details">
-  <h2>Agent memory</h2>
-  <p>Raw diary, live catalog, provenance, projects, repos, cloud resources, and agent sessions in one local graph.</p>
-  <div class="chips">
-    <span>${graph.counts.projects} projects</span>
-    <span>${graph.counts.raw} raw nodes</span>
-    <span>${graph.counts.sessions} sessions</span>
-    <span>${graph.counts.repos} repos</span>
-    <span>${graph.counts.gcloudProjects} GCloud</span>
-    <span>${graph.counts.firebaseProjects} Firebase</span>
+<nav class="panel cluster-rail" id="clusterRail" aria-label="Theme clusters"></nav>
+<aside class="panel inspector" id="inspector" hidden>
+  <div class="inspector-head">
+    <div>
+      <p class="eyebrow" id="inspectorType"></p>
+      <h2 id="inspectorTitle"></h2>
+    </div>
+    <button class="close-button" id="closeInspector" type="button" aria-label="Close inspector">×</button>
   </div>
+  <div class="inspector-body" id="inspectorBody"></div>
 </aside>
-<div class="panel legend">
-  <div><span class="dot" style="background:#d8d8d8"></span>Project</div>
-  <div><span class="dot" style="background:#a8a8a8"></span>Raw item</div>
-  <div><span class="dot" style="background:#91b5ff"></span>Tag / theme</div>
-  <div><span class="dot" style="background:#b9f0d0"></span>GitHub repo</div>
-  <div><span class="dot" style="background:#ffd28b"></span>Cloud resource</div>
-  <div><span class="dot" style="background:#ffffff"></span>Memory lens</div>
-  <div><span class="dot" style="background:#c6a7ff"></span>Agent/system</div>
-</div>
 <div class="tooltip" id="tooltip"></div>
+<div class="status-toast" id="toast"></div>
 <script>
 const graph = ${graphJson};
 const canvas = document.getElementById("graph");
 const ctx = canvas.getContext("2d");
-const details = document.getElementById("details");
 const tooltip = document.getElementById("tooltip");
 const search = document.getElementById("search");
 const reset = document.getElementById("reset");
+const fit = document.getElementById("fit");
+const inspector = document.getElementById("inspector");
+const inspectorType = document.getElementById("inspectorType");
+const inspectorTitle = document.getElementById("inspectorTitle");
+const inspectorBody = document.getElementById("inspectorBody");
+const closeInspector = document.getElementById("closeInspector");
+const clusterRail = document.getElementById("clusterRail");
+const toast = document.getElementById("toast");
 const colors = {
-  project: "#d8d8d8",
-  tag: "#91b5ff",
-  repo: "#b9f0d0",
-  external: "#ffd28b",
-  cloud: "#ffd28b",
-  firebase: "#ffbf77",
+  project: "#d4d4d1",
+  tag: "#f1f1ee",
+  repo: "#bdebd4",
+  external: "#f0cf8a",
+  cloud: "#f0cf8a",
+  firebase: "#f3b67b",
   memory: "#ffffff",
-  raw: "#a8a8a8",
-  session: "#7e7e7e",
-  system: "#c6a7ff"
+  raw: "#a8aaa8",
+  session: "#777b77",
+  system: "#d2b7ff"
 };
 let width = 0;
 let height = 0;
 let scale = 1;
+let zoom = 1;
+let panX = 0;
+let panY = 0;
 let hovered = null;
 let selected = null;
 let query = "";
-const nodes = graph.nodes.map(function(node, index) {
-  const angle = index * 2.399963229728653;
-  const ring = node.type === "memory" ? 0 : node.type === "project" ? 0.24 : node.type === "tag" ? 0.4 : node.type === "raw" ? 0.54 : node.type === "session" ? 0.7 : 0.62;
+let pointer = { x: 0, y: 0, inside: false };
+let isDragging = false;
+let dragStart = null;
+let dragMoved = false;
+let activeClusterId = "";
+const clusterById = new Map((graph.clusters || []).map(function(cluster) { return [cluster.id, cluster]; }));
+const orderedClusters = (graph.clusters || []).slice();
+const clusterCenters = new Map();
+
+function placeClusters() {
+  const satelliteCount = Math.max(1, orderedClusters.length - 1);
+  orderedClusters.forEach(function(cluster, index) {
+    if (index === 0) {
+      clusterCenters.set(cluster.id, { x: -0.16, y: 0.04 });
+      return;
+    }
+    const angle = -Math.PI / 2 + (index - 1) * (Math.PI * 2 / satelliteCount);
+    const radius = 0.47 + (index % 2) * 0.06;
+    clusterCenters.set(cluster.id, { x: Math.cos(angle) * radius + 0.03, y: Math.sin(angle) * radius });
+  });
+  if (!clusterCenters.has("other-work")) clusterCenters.set("other-work", { x: 0.42, y: 0.38 });
+}
+
+function hashNumber(value) {
+  let hash = 2166136261;
+  const text = String(value || "");
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0) / 4294967295;
+}
+
+function nodeSpread(node) {
+  if (node.type === "cluster") return 0;
+  if (node.type === "memory") return 0.018;
+  if (node.type === "tag") return 0.085;
+  if (node.type === "project") return 0.15;
+  if (node.type === "raw") return 0.2;
+  if (node.type === "session") return 0.23;
+  return 0.18;
+}
+
+placeClusters();
+const nodes = graph.nodes.map(function(node) {
+  const center = clusterCenters.get(node.cluster) || clusterCenters.get("other-work") || { x: 0, y: 0 };
+  const angle = hashNumber(node.id + ":angle") * Math.PI * 2;
+  const spread = nodeSpread(node) * (0.45 + hashNumber(node.id + ":radius") * 0.85);
+  const isCluster = node.type === "cluster";
+  const isMemory = node.type === "memory";
   return Object.assign({}, node, {
-    x: node.type === "memory" ? 0 : Math.cos(angle) * ring,
-    y: node.type === "memory" ? 0 : Math.sin(angle) * ring,
+    x: isCluster ? center.x : isMemory ? center.x - 0.015 : center.x + Math.cos(angle) * spread,
+    y: isCluster ? center.y : isMemory ? center.y + 0.005 : center.y + Math.sin(angle) * spread,
     vx: 0,
     vy: 0,
     radius: radiusFor(node)
@@ -981,46 +1329,106 @@ const byId = new Map(nodes.map(function(node) { return [node.id, node]; }));
 const edges = graph.edges.map(function(edge) {
   return Object.assign({}, edge, { source: byId.get(edge.source), target: byId.get(edge.target) });
 }).filter(function(edge) { return edge.source && edge.target; });
+const adjacency = new Map(nodes.map(function(node) { return [node.id, new Set()]; }));
+for (const edge of edges) {
+  adjacency.get(edge.source.id)?.add(edge.target.id);
+  adjacency.get(edge.target.id)?.add(edge.source.id);
+}
+
 function radiusFor(node) {
   const weight = Math.max(1, Number(node.weight || 1));
-  if (node.type === "memory") return 24;
-  if (node.type === "tag") return Math.min(18, 5 + Math.log10(weight + 1) * 4.2);
-  if (node.type === "project") return Math.min(16, 4.5 + Math.log10(weight + 1) * 3.2);
-  if (node.type === "raw" || node.type === "session") return 3.6;
+  if (node.type === "memory") return 17;
+  if (node.type === "cluster") return Math.min(28, 13 + Math.log10(weight + 1) * 3.4);
+  if (node.type === "tag") return Math.min(16, 4.8 + Math.log10(weight + 1) * 3.6);
+  if (node.type === "project") return Math.min(13, 4.2 + Math.log10(weight + 1) * 2.7);
+  if (node.type === "raw" || node.type === "session") return 2.9;
   if (node.type === "system" || node.type === "external") return 10;
   return 5.5;
 }
+
 function resize() {
   const ratio = window.devicePixelRatio || 1;
   width = window.innerWidth;
   height = window.innerHeight;
-  scale = Math.min(width, height) * 0.84;
+  scale = Math.min(width, height) * 0.9;
   canvas.width = Math.floor(width * ratio);
   canvas.height = Math.floor(height * ratio);
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
 }
-function screenX(node) { return width / 2 + node.x * scale; }
-function screenY(node) { return height / 2 + node.y * scale; }
+function screenX(node) { return width / 2 + panX + node.x * scale * zoom; }
+function screenY(node) { return height / 2 + panY + node.y * scale * zoom; }
+function screenToWorld(x, y) {
+  return {
+    x: (x - width / 2 - panX) / (scale * zoom),
+    y: (y - height / 2 - panY) / (scale * zoom)
+  };
+}
+function fitToGraph() {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const node of nodes) {
+    const pad = node.type === "cluster" ? 0.5 : node.type === "tag" ? 0.2 : 0.1;
+    minX = Math.min(minX, node.x - pad);
+    maxX = Math.max(maxX, node.x + pad);
+    minY = Math.min(minY, node.y - pad);
+    maxY = Math.max(maxY, node.y + pad);
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
+  const worldWidth = Math.max(0.2, maxX - minX);
+  const worldHeight = Math.max(0.2, maxY - minY);
+  const safe = { left: 40, top: 92, right: 244, bottom: 72 };
+  const availableWidth = Math.max(360, width - safe.left - safe.right);
+  const availableHeight = Math.max(300, height - safe.top - safe.bottom);
+  zoom = Math.max(0.44, Math.min(1.8, Math.min(availableWidth / (worldWidth * scale), availableHeight / (worldHeight * scale))));
+  const centerX = (minX + maxX) / 2;
+  const centerY = (minY + maxY) / 2;
+  const safeCenterX = safe.left + availableWidth / 2;
+  const safeCenterY = safe.top + availableHeight / 2;
+  panX = safeCenterX - width / 2 - centerX * scale * zoom;
+  panY = safeCenterY - height / 2 - centerY * scale * zoom;
+}
+function magnifiedPosition(node) {
+  const baseX = screenX(node);
+  const baseY = screenY(node);
+  if (!pointer.inside) return { x: baseX, y: baseY, amount: 0 };
+  const dx = baseX - pointer.x;
+  const dy = baseY - pointer.y;
+  const distance = Math.hypot(dx, dy);
+  const lensRadius = Math.min(170, Math.max(110, Math.min(width, height) * 0.14));
+  if (distance > lensRadius) return { x: baseX, y: baseY, amount: 0 };
+  const amount = Math.pow(1 - distance / lensRadius, 2);
+  return {
+    x: pointer.x + dx * (1 + 0.95 * amount),
+    y: pointer.y + dy * (1 + 0.95 * amount),
+    amount
+  };
+}
+
 function tick() {
   for (const node of nodes) {
-    if (node.type === "memory") {
-      node.vx += -node.x * 0.05;
-      node.vy += -node.y * 0.05;
+    const center = clusterCenters.get(node.cluster) || clusterCenters.get("other-work") || { x: 0, y: 0 };
+    if (node.type === "cluster") {
+      node.vx += (center.x - node.x) * 0.08;
+      node.vy += (center.y - node.y) * 0.08;
       continue;
     }
-    const targetRadius = node.type === "project" ? 0.2 : node.type === "tag" ? 0.38 : node.type === "raw" ? 0.5 : node.type === "session" ? 0.68 : node.type === "repo" ? 0.64 : 0.56;
-    const distance = Math.max(0.001, Math.hypot(node.x, node.y));
-    node.vx += (node.x / distance * targetRadius - node.x) * 0.0025;
-    node.vy += (node.y / distance * targetRadius - node.y) * 0.0025;
-    node.vx += -node.x * 0.0009;
-    node.vy += -node.y * 0.0009;
+    if (node.type === "memory") {
+      node.vx += (center.x - 0.015 - node.x) * 0.05;
+      node.vy += (center.y + 0.005 - node.y) * 0.05;
+      continue;
+    }
+    const attraction = node.type === "tag" ? 0.006 : node.type === "project" ? 0.0045 : 0.003;
+    node.vx += (center.x - node.x) * attraction;
+    node.vy += (center.y - node.y) * attraction;
   }
   for (const edge of edges) {
     const dx = edge.target.x - edge.source.x;
     const dy = edge.target.y - edge.source.y;
     const distance = Math.max(0.001, Math.hypot(dx, dy));
-    const ideal = edge.type === "project-tag" ? 0.11 : edge.type === "project-raw" ? 0.08 : edge.type === "raw-tag" ? 0.1 : edge.type === "system-session" ? 0.12 : edge.type === "project-repo" ? 0.16 : 0.18;
-    const force = (distance - ideal) * 0.012 * Math.min(4, edge.weight || 1);
+    const ideal = edge.type === "cluster-tag" ? 0.09 : edge.type === "cluster-project" ? 0.14 : edge.type === "project-tag" ? 0.095 : edge.type === "project-raw" ? 0.075 : edge.type === "raw-tag" ? 0.1 : edge.type === "system-session" ? 0.12 : edge.type === "project-repo" ? 0.16 : 0.19;
+    const force = (distance - ideal) * 0.01 * Math.min(4, edge.weight || 1);
     const fx = dx / distance * force;
     const fy = dy / distance * force;
     edge.source.vx += fx;
@@ -1028,14 +1436,15 @@ function tick() {
     edge.target.vx -= fx;
     edge.target.vy -= fy;
   }
-  for (let i = 0; i < nodes.length; i++) {
-    for (let j = i + 1; j < nodes.length; j++) {
+  for (let i = 0; i < nodes.length; i += 1) {
+    for (let j = i + 1; j < nodes.length; j += 1) {
       const a = nodes[i];
       const b = nodes[j];
       const dx = b.x - a.x;
       const dy = b.y - a.y;
-      const d2 = dx * dx + dy * dy + 0.0008;
-      const force = 0.000018 * (a.radius + b.radius) / d2;
+      const d2 = dx * dx + dy * dy + 0.001;
+      const sameCluster = a.cluster && a.cluster === b.cluster;
+      const force = (sameCluster ? 0.000015 : 0.000024) * (a.radius + b.radius) / d2;
       a.vx -= dx * force;
       a.vy -= dy * force;
       b.vx += dx * force;
@@ -1049,47 +1458,142 @@ function tick() {
     node.y += node.vy;
   }
 }
+
 function isMatched(node) {
   if (!query) return false;
-  const text = [node.label, node.detail, node.path, node.remote, node.url, (node.tags || []).join(" ")].join(" ").toLowerCase();
+  const text = [node.label, node.detail, node.path, node.remote, node.url, node.cluster, clusterById.get(node.cluster)?.label, (node.tags || []).join(" ")].join(" ").toLowerCase();
   return text.includes(query);
 }
-function isConnectedToFocus(edge) {
+function focusedNodeIds() {
   const focus = selected || hovered;
-  if (!focus && !query) return true;
-  if (focus && (edge.source === focus || edge.target === focus)) return true;
-  if (query && (isMatched(edge.source) || isMatched(edge.target))) return true;
+  const ids = new Set();
+  if (activeClusterId) {
+    for (const node of nodes) if (node.cluster === activeClusterId) ids.add(node.id);
+  }
+  if (focus) {
+    ids.add(focus.id);
+    if (focus.type === "cluster") {
+      for (const node of nodes) if (node.cluster === focus.cluster) ids.add(node.id);
+    }
+    for (const relatedId of adjacency.get(focus.id) || []) ids.add(relatedId);
+  }
+  if (query) {
+    for (const node of nodes) {
+      if (isMatched(node)) {
+        ids.add(node.id);
+        for (const relatedId of adjacency.get(node.id) || []) ids.add(relatedId);
+      }
+    }
+  }
+  return ids;
+}
+function nodeActive(node, ids) {
+  if (!ids.size) return true;
+  return ids.has(node.id);
+}
+function edgeActive(edge, ids) {
+  if (!ids.size) return true;
+  return ids.has(edge.source.id) || ids.has(edge.target.id);
+}
+function clusterActive(clusterId, ids) {
+  if (!ids.size) return true;
+  if (activeClusterId && clusterId === activeClusterId) return true;
+  for (const node of nodes) {
+    if (node.cluster === clusterId && ids.has(node.id)) return true;
+  }
   return false;
 }
 function draw() {
   tick();
   ctx.clearRect(0, 0, width, height);
+  const activeIds = focusedNodeIds();
+
+  for (const clusterNode of nodes.filter(function(node) { return node.type === "cluster"; })) {
+    const cluster = clusterById.get(clusterNode.cluster) || {};
+    const pos = magnifiedPosition(clusterNode);
+    const active = clusterActive(clusterNode.cluster, activeIds);
+    const halo = (72 + Math.min(120, Math.log10(Math.max(10, clusterNode.weight || 1)) * 45)) * zoom;
+    const color = cluster.color || clusterNode.color || "#cccccc";
+    const gradient = ctx.createRadialGradient(pos.x, pos.y, 0, pos.x, pos.y, halo);
+    gradient.addColorStop(0, color + (active ? "38" : "18"));
+    gradient.addColorStop(0.58, color + (active ? "18" : "08"));
+    gradient.addColorStop(1, "rgba(255,255,255,0)");
+    ctx.fillStyle = gradient;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, halo, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = active ? "rgba(235,235,230,0.22)" : "rgba(210,210,205,0.08)";
+    ctx.lineWidth = active ? 1.2 : 0.8;
+    ctx.beginPath();
+    ctx.arc(pos.x, pos.y, halo * 0.68, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.font = active ? "650 13px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" : "12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+    ctx.fillStyle = active ? "rgba(242,242,238,0.86)" : "rgba(220,220,216,0.46)";
+    ctx.fillText(clusterNode.label, pos.x - halo * 0.34, pos.y - halo * 0.44);
+  }
+
   ctx.lineWidth = 1;
   for (const edge of edges) {
-    const active = isConnectedToFocus(edge);
-    ctx.strokeStyle = active ? "rgba(220,220,220,0.28)" : "rgba(190,190,190,0.08)";
+    const active = edgeActive(edge, activeIds);
+    const source = magnifiedPosition(edge.source);
+    const target = magnifiedPosition(edge.target);
+    ctx.strokeStyle = active ? "rgba(220,220,216,0.24)" : "rgba(190,190,186,0.045)";
+    ctx.globalAlpha = active ? 1 : 0.62;
     ctx.beginPath();
-    ctx.moveTo(screenX(edge.source), screenY(edge.source));
-    ctx.lineTo(screenX(edge.target), screenY(edge.target));
+    ctx.moveTo(source.x, source.y);
+    ctx.lineTo(target.x, target.y);
     ctx.stroke();
   }
+  ctx.globalAlpha = 1;
+
   for (const node of nodes) {
-    const active = selected === node || hovered === node || isMatched(node);
-    const dim = (selected || hovered || query) && !active;
+    if (node.type === "cluster") continue;
+    const active = selected === node || hovered === node || isMatched(node) || nodeActive(node, activeIds);
+    const dim = activeIds.size && !nodeActive(node, activeIds);
+    const pos = magnifiedPosition(node);
+    const lensBoost = 1 + pos.amount * 1.9;
+    const selectBoost = selected === node ? 1.55 : hovered === node ? 1.38 : 1;
+    const radius = node.radius * lensBoost * selectBoost * (node.type === "tag" && activeClusterId === node.cluster ? 1.18 : 1);
+    const color = node.color || colors[node.type] || "#ccc";
     ctx.beginPath();
-    ctx.fillStyle = dim ? "rgba(150,150,150,0.18)" : colors[node.type] || "#ccc";
-    ctx.globalAlpha = active ? 1 : dim ? 0.45 : 0.78;
-    ctx.arc(screenX(node), screenY(node), node.radius * (active ? 1.45 : 1), 0, Math.PI * 2);
+    ctx.fillStyle = dim ? "rgba(150,150,146,0.18)" : color;
+    ctx.globalAlpha = selected === node || hovered === node ? 1 : dim ? 0.28 : node.type === "raw" || node.type === "session" ? 0.72 : 0.86;
+    ctx.arc(pos.x, pos.y, radius, 0, Math.PI * 2);
     ctx.fill();
     ctx.globalAlpha = 1;
-    if (active || node.radius > 12 || node.type === "external") {
-      ctx.font = active ? "600 13px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" : "12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
-      ctx.fillStyle = active ? "#f2f2f2" : "rgba(230,230,230,0.7)";
-      ctx.fillText(node.label.slice(0, 34), screenX(node) + node.radius + 7, screenY(node) + 4);
+    if (node.type === "memory") {
+      ctx.strokeStyle = "rgba(255,255,255,0.6)";
+      ctx.lineWidth = 1.1;
+      ctx.beginPath();
+      ctx.arc(pos.x, pos.y, radius + 7, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    if (selected === node || hovered === node || isMatched(node) || node.type === "tag" || node.type === "external" || node.type === "memory") {
+      ctx.font = selected === node || hovered === node ? "650 13px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" : "12px -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif";
+      ctx.fillStyle = dim ? "rgba(225,225,220,0.36)" : "rgba(242,242,238,0.82)";
+      ctx.fillText(node.label.slice(0, 34), pos.x + radius + 7, pos.y + 4);
     }
   }
-  requestAnimationFrame(draw);
+
+  if (pointer.inside) {
+    const lensRadius = Math.min(170, Math.max(110, Math.min(width, height) * 0.14));
+    ctx.strokeStyle = "rgba(255,255,255,0.11)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(pointer.x, pointer.y, lensRadius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 }
+let drawPending = false;
+function scheduleDraw() {
+  if (drawPending) return;
+  drawPending = true;
+  requestAnimationFrame(function() {
+    drawPending = false;
+    draw();
+  });
+}
+
 function nearestNode(event) {
   const rect = canvas.getBoundingClientRect();
   const x = event.clientX - rect.left;
@@ -1097,57 +1601,280 @@ function nearestNode(event) {
   let best = null;
   let bestDistance = Infinity;
   for (const node of nodes) {
-    const dx = screenX(node) - x;
-    const dy = screenY(node) - y;
+    const pos = magnifiedPosition(node);
+    const dx = pos.x - x;
+    const dy = pos.y - y;
     const distance = Math.hypot(dx, dy);
-    if (distance < Math.max(12, node.radius + 5) && distance < bestDistance) {
+    const hitRadius = node.type === "cluster" ? Math.max(22, node.radius + 8) : Math.max(10, node.radius + 6 + pos.amount * 18);
+    if (distance < hitRadius && distance < bestDistance) {
       best = node;
       bestDistance = distance;
     }
   }
   return best;
 }
+function relatedNodes(node) {
+  const ids = new Set(adjacency.get(node.id) || []);
+  if (node.type === "cluster") {
+    for (const item of nodes) if (item.cluster === node.cluster && item.id !== node.id) ids.add(item.id);
+  }
+  return [...ids].map(function(id) { return byId.get(id); }).filter(Boolean).sort(function(left, right) {
+    const rank = { cluster: 6, tag: 5, project: 4, external: 3, repo: 2, raw: 1, session: 1 };
+    return (rank[right.type] || 0) - (rank[left.type] || 0) || Number(right.weight || 0) - Number(left.weight || 0);
+  });
+}
+function clusterName(clusterId) {
+  return clusterById.get(clusterId)?.label || clusterId || "Unclustered";
+}
+function shellQuote(value) {
+  return "'" + String(value || "").replaceAll("'", "'\\\\''") + "'";
+}
+function analysisCommand(node) {
+  if (node.type === "cluster") return "npm run workdb -- analyze-cluster " + shellQuote(node.cluster);
+  if (node.type === "tag") return "npm run workdb -- analyze-tag " + shellQuote(node.label);
+  if (node.type === "project") return "npm run workdb -- project " + shellQuote(node.label);
+  return "npm run workdb -- search " + shellQuote(node.label);
+}
+function analysisPayload(node) {
+  if (node.type === "cluster") return { kind: "cluster", id: node.cluster, limit: 30 };
+  if (node.type === "tag") return { kind: "tag", id: node.label, limit: 30 };
+  return null;
+}
 function renderDetails(node) {
   if (!node) return;
-  const chips = (node.tags || []).map(function(tag) { return "<span>" + escapeHtml(tag) + "</span>"; }).join("");
-  details.innerHTML = "<h2>" + escapeHtml(node.label) + "</h2>"
-    + "<p>" + escapeHtml(node.type) + " · " + escapeHtml(node.detail || "") + "</p>"
+  inspector.hidden = false;
+  inspectorType.textContent = node.type + (node.cluster ? " · " + clusterName(node.cluster) : "");
+  inspectorTitle.textContent = node.label;
+  const related = relatedNodes(node).slice(0, 12);
+  const chips = (node.tags || []).slice(0, 18).map(function(tag) { return "<span>" + escapeHtml(tag) + "</span>"; }).join("");
+  const command = analysisCommand(node);
+  const payload = analysisPayload(node);
+  const totals = [
+    node.fileCount ? node.fileCount + " files" : "",
+    node.sessionCount ? node.sessionCount + " sessions" : "",
+    node.totalRecords ? node.totalRecords + " records" : ""
+  ].filter(Boolean);
+  inspectorBody.innerHTML = ""
+    + "<p>" + escapeHtml(node.detail || "") + "</p>"
+    + "<div class=\\"meta-row\\">"
+    + "<span>" + escapeHtml(node.type) + "</span>"
+    + (node.weight ? "<span>weight " + escapeHtml(Math.round(node.weight)) + "</span>" : "")
+    + (node.cluster ? "<span>" + escapeHtml(clusterName(node.cluster)) + "</span>" : "")
+    + totals.map(function(item) { return "<span>" + escapeHtml(item) + "</span>"; }).join("")
+    + "</div>"
     + (node.path ? "<code>" + escapeHtml(node.path) + "</code>" : "")
     + (node.remote ? "<code>" + escapeHtml(node.remote) + "</code>" : "")
     + (node.url ? "<code>" + escapeHtml(node.url) + "</code>" : "")
-    + (chips ? "<div class=\\"chips\\">" + chips + "</div>" : "");
+    + (chips ? "<div class=\\"chips\\">" + chips + "</div>" : "")
+    + "<div class=\\"actions\\">"
+    + "<button type=\\"button\\" data-action=\\"focus\\">Focus graph</button>"
+    + (payload ? "<button type=\\"button\\" data-action=\\"run-analysis\\">Run analysis</button>" : "<button type=\\"button\\" data-action=\\"copy\\">Copy command</button>")
+    + "</div>"
+    + "<code>" + escapeHtml(command) + "</code>"
+    + (related.length ? "<div class=\\"related\\">" + related.map(function(item) {
+        return "<button type=\\"button\\" data-node-id=\\"" + escapeHtml(item.id) + "\\"><strong>" + escapeHtml(item.label) + "</strong><span>" + escapeHtml(item.type + " · " + (item.detail || clusterName(item.cluster))) + "</span></button>";
+      }).join("") + "</div>" : "");
+  inspectorBody.querySelector("[data-action='focus']")?.addEventListener("click", function() {
+    focusNode(node);
+  });
+  inspectorBody.querySelector("[data-action='copy']")?.addEventListener("click", function() {
+    copyText(command);
+  });
+  inspectorBody.querySelector("[data-action='run-analysis']")?.addEventListener("click", function() {
+    runAnalysisFromGraph(payload, command);
+  });
+  inspectorBody.querySelectorAll("[data-node-id]").forEach(function(button) {
+    button.addEventListener("click", function() {
+      const next = byId.get(button.dataset.nodeId);
+      if (next) {
+        selected = next;
+        activeClusterId = next.type === "cluster" ? next.cluster : activeClusterId;
+        renderDetails(next);
+        updateClusterRail();
+      }
+    });
+  });
 }
 function escapeHtml(value) {
   return String(value || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
 }
+function copyText(value) {
+  if (navigator.clipboard?.writeText) {
+    navigator.clipboard.writeText(value).then(function() { showToast("Command copied"); }).catch(function() { showToast("Copy failed"); });
+  } else {
+    showToast("Copy unavailable in this browser");
+  }
+}
+async function runAnalysisFromGraph(payload, fallbackCommand) {
+  if (!payload) return copyText(fallbackCommand);
+  showToast("Running analysis...");
+  const previousResult = inspectorBody.querySelector(".analysis-result");
+  if (previousResult) previousResult.remove();
+  try {
+    const response = await fetch("/api/analyze", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || "Analysis failed");
+    showToast("Analysis report ready");
+    const link = result.url || result.relativePath;
+    const resultBox = document.createElement("div");
+    resultBox.className = "analysis-result";
+    resultBox.innerHTML = "<strong>Analysis ready</strong>"
+      + "<p>" + escapeHtml(result.files + " files · " + result.projects + " projects · " + result.sessions + " sessions") + "</p>"
+      + (link ? "<a href=\\"" + escapeHtml(link) + "\\" target=\\"_blank\\" rel=\\"noopener\\">Open report</a>" : "");
+    inspectorBody.prepend(resultBox);
+  } catch (error) {
+    showToast("Run npm run workdb -- serve to enable in-graph analysis");
+    copyText(fallbackCommand);
+  }
+}
+function showToast(message) {
+  toast.textContent = message;
+  toast.style.display = "block";
+  window.clearTimeout(showToast.timeout);
+  showToast.timeout = window.setTimeout(function() { toast.style.display = "none"; }, 1800);
+}
+function focusNode(node) {
+  selected = node;
+  activeClusterId = node.type === "cluster" ? node.cluster : node.cluster || "";
+  const center = node.type === "cluster" ? node : byId.get("cluster:" + node.cluster) || node;
+  zoom = Math.max(1.08, Math.min(1.7, zoom));
+  panX = -center.x * scale * zoom;
+  panY = -center.y * scale * zoom;
+  updateClusterRail();
+  scheduleDraw();
+}
+function updateClusterRail() {
+  clusterRail.querySelectorAll("[data-cluster-id]").forEach(function(button) {
+    button.classList.toggle("is-active", button.dataset.clusterId === activeClusterId);
+  });
+}
+function renderClusterRail() {
+  clusterRail.innerHTML = orderedClusters.map(function(cluster) {
+    return "<button class=\\"cluster-button\\" type=\\"button\\" data-cluster-id=\\"" + escapeHtml(cluster.id) + "\\"><span class=\\"swatch\\" style=\\"background:" + escapeHtml(cluster.color || "#aaa") + "\\"></span>" + escapeHtml(cluster.label) + "</button>";
+  }).join("");
+  clusterRail.querySelectorAll("[data-cluster-id]").forEach(function(button) {
+    button.addEventListener("click", function() {
+      const clusterId = button.dataset.clusterId;
+      const clusterNode = byId.get("cluster:" + clusterId);
+      activeClusterId = activeClusterId === clusterId ? "" : clusterId;
+      selected = clusterNode || null;
+      if (selected) {
+        focusNode(selected);
+        renderDetails(selected);
+      } else {
+        inspector.hidden = true;
+      }
+      updateClusterRail();
+      scheduleDraw();
+    });
+  });
+}
+
 canvas.addEventListener("mousemove", function(event) {
+  const rect = canvas.getBoundingClientRect();
+  pointer = { x: event.clientX - rect.left, y: event.clientY - rect.top, inside: true };
+  if (isDragging && dragStart) {
+    if (Math.abs(event.clientX - dragStart.x) > 3 || Math.abs(event.clientY - dragStart.y) > 3) dragMoved = true;
+    panX = dragStart.panX + event.clientX - dragStart.x;
+    panY = dragStart.panY + event.clientY - dragStart.y;
+    tooltip.style.display = "none";
+    scheduleDraw();
+    return;
+  }
   hovered = nearestNode(event);
   if (hovered) {
     tooltip.style.display = "block";
     tooltip.style.left = event.clientX + "px";
     tooltip.style.top = event.clientY + "px";
-    tooltip.textContent = hovered.label + (hovered.detail ? " · " + hovered.detail : "");
+    tooltip.textContent = hovered.label + (hovered.detail ? " · " + hovered.detail : "") + (hovered.cluster ? " · " + clusterName(hovered.cluster) : "");
     canvas.style.cursor = "pointer";
   } else {
     tooltip.style.display = "none";
-    canvas.style.cursor = "default";
+    canvas.style.cursor = isDragging ? "grabbing" : "grab";
   }
+  scheduleDraw();
+});
+canvas.addEventListener("mouseleave", function() {
+  pointer.inside = false;
+  hovered = null;
+  tooltip.style.display = "none";
+  scheduleDraw();
+});
+canvas.addEventListener("mousedown", function(event) {
+  isDragging = true;
+  dragStart = { x: event.clientX, y: event.clientY, panX, panY };
+  dragMoved = false;
+  canvas.style.cursor = "grabbing";
+});
+window.addEventListener("mouseup", function() {
+  isDragging = false;
+  dragStart = null;
 });
 canvas.addEventListener("click", function(event) {
+  if (dragMoved) {
+    dragMoved = false;
+    return;
+  }
   selected = nearestNode(event);
-  if (selected) renderDetails(selected);
+  if (selected) {
+    activeClusterId = selected.type === "cluster" ? selected.cluster : selected.cluster || activeClusterId;
+    renderDetails(selected);
+    updateClusterRail();
+    scheduleDraw();
+  }
 });
-search.addEventListener("input", function() { query = search.value.trim().toLowerCase(); });
+canvas.addEventListener("dblclick", function(event) {
+  const node = nearestNode(event);
+  if (node) focusNode(node);
+  scheduleDraw();
+});
+canvas.addEventListener("wheel", function(event) {
+  event.preventDefault();
+  const rect = canvas.getBoundingClientRect();
+  const before = screenToWorld(event.clientX - rect.left, event.clientY - rect.top);
+  const factor = event.deltaY > 0 ? 0.9 : 1.11;
+  zoom = Math.max(0.62, Math.min(2.45, zoom * factor));
+  panX = event.clientX - rect.left - width / 2 - before.x * scale * zoom;
+  panY = event.clientY - rect.top - height / 2 - before.y * scale * zoom;
+  scheduleDraw();
+}, { passive: false });
+search.addEventListener("input", function() {
+  query = search.value.trim().toLowerCase();
+  scheduleDraw();
+});
 reset.addEventListener("click", function() {
   selected = null;
   hovered = null;
   query = "";
+  activeClusterId = "";
   search.value = "";
-  details.innerHTML = "<h2>Agent memory</h2><p>Raw diary, live catalog, provenance, projects, repos, cloud resources, and agent sessions in one local graph.</p><div class=\\"chips\\"><span>${graph.counts.projects} projects</span><span>${graph.counts.raw} raw nodes</span><span>${graph.counts.sessions} sessions</span><span>${graph.counts.repos} repos</span><span>${graph.counts.gcloudProjects} GCloud</span><span>${graph.counts.firebaseProjects} Firebase</span></div>";
+  inspector.hidden = true;
+  fitToGraph();
+  updateClusterRail();
+  scheduleDraw();
 });
-window.addEventListener("resize", resize);
+fit.addEventListener("click", function() {
+  fitToGraph();
+  scheduleDraw();
+});
+closeInspector.addEventListener("click", function() {
+  selected = null;
+  inspector.hidden = true;
+  scheduleDraw();
+});
+window.addEventListener("resize", function() {
+  resize();
+  fitToGraph();
+  scheduleDraw();
+});
 resize();
-for (let i = 0; i < 260; i++) tick();
+renderClusterRail();
+for (let i = 0; i < 340; i += 1) tick();
+fitToGraph();
 draw();
 </script>
 </body>
@@ -1276,6 +2003,8 @@ function writeCatalog(db) {
     "- `npm run workdb -- search \"query\" --limit 20`",
     "- `npm run workdb -- project \"project name\"`",
     "- `npm run workdb -- tags --limit 40`",
+    "- `npm run workdb -- analyze-tag \"tag\"`",
+    "- `npm run workdb -- analyze-cluster \"cluster-id\"`",
     "",
     "## Known Limits",
     "",
@@ -1326,6 +2055,7 @@ function writeSummary(db) {
     `- Codex sessions: ${db.counts.codexSessions}`,
     `- Claude session/task files: ${db.counts.claudeSessions}`,
     `- Tags: ${db.counts.tags}`,
+    `- Theme clusters: ${themeClusters.length}`,
     "",
     "## Top Tags",
     "",
@@ -1342,6 +2072,7 @@ function writeSummary(db) {
     `- Master catalog: ${relative(root, catalogPath)}`,
     `- Provenance policy: ${relative(root, provenancePath)}`,
     `- Knowledge graph: ${relative(root, join(outputRoot, "tag-cloud.html"))}`,
+    `- Analysis reports: ${relative(root, join(outputRoot, "analysis"))}`,
     "",
     "## Notes",
     "",
@@ -1454,6 +2185,232 @@ function tags(flags) {
   for (const item of rows) console.log(`${item.count}\t${item.tag}`);
 }
 
+function loadJsonl(filePath) {
+  if (!existsSync(filePath)) return [];
+  return readFileSync(filePath, "utf8")
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .map((line) => {
+      try {
+        return JSON.parse(line);
+      } catch {
+        return null;
+      }
+    })
+    .filter(Boolean);
+}
+
+function rowText(row) {
+  return [row.title, row.name, row.path, row.relativePath, row.snippet, row.detail, row.remote, ...(row.tags || [])]
+    .join("\n")
+    .toLowerCase();
+}
+
+function tagMatcher(tag) {
+  const normalized = String(tag || "").trim().toLowerCase();
+  return (row) => (row.tags || []).includes(normalized) || rowText(row).includes(normalized);
+}
+
+function clusterMatcher(clusterId) {
+  const cluster = clusterById.get(clusterId);
+  const clusterTags = new Set(cluster?.tags || []);
+  return (row) => {
+    const rowTags = row.tags || [];
+    if (rowTags.some((tag) => clusterTags.has(tag))) return true;
+    return clusterForTags(rowTags, rowText(row)) === clusterId;
+  };
+}
+
+function topRelatedTags(rows, limit = 24) {
+  const counts = new Map();
+  for (const row of rows) {
+    for (const tag of row.tags || []) counts.set(tag, (counts.get(tag) || 0) + 1);
+  }
+  return [...counts.entries()]
+    .map(([tag, count]) => ({ tag, count }))
+    .sort((left, right) => right.count - left.count || left.tag.localeCompare(right.tag))
+    .slice(0, limit);
+}
+
+function analysisMarkdown({ kind, id, label, rows, projects, sessions, relatedTags, limit }) {
+  const topProjects = projects
+    .slice()
+    .sort((left, right) => Number(right.fileCount || 0) - Number(left.fileCount || 0))
+    .slice(0, Math.min(limit, 20));
+  const topFiles = rows
+    .filter((row) => !row.sensitive)
+    .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")))
+    .slice(0, limit);
+  const topSessions = sessions
+    .slice()
+    .sort((left, right) => String(right.updatedAt || "").localeCompare(String(left.updatedAt || "")))
+    .slice(0, Math.min(limit, 18));
+
+  const lines = [
+    `# ${label} analysis`,
+    "",
+    `Generated: ${new Date().toISOString()}`,
+    "",
+    "## Scope",
+    "",
+    `- Type: ${kind}`,
+    `- ID: ${id}`,
+    `- Provenance: inferred analysis over extracted local DB metadata, safe snippets, and session titles.`,
+    "",
+    "## Counts",
+    "",
+    `- Matching projects: ${projects.length}`,
+    `- Matching files: ${rows.length}`,
+    `- Matching sessions: ${sessions.length}`,
+    `- Related tags: ${relatedTags.length}`,
+    `- Full file index: ${relative(root, filesPath)}`,
+    `- Full session index: ${relative(root, sessionsPath)}`,
+    `- Full project index: ${relative(root, projectsPath)}`,
+    "",
+    "## Related Tags",
+    "",
+    ...(relatedTags.length ? relatedTags.map((item) => `- ${item.tag}: ${item.count}`) : ["- none"]),
+    "",
+    "## Project Dossier",
+    "",
+    ...(topProjects.length ? topProjects.map((project) => {
+      const remote = project.remote ? `; remote ${project.remote}` : "";
+      return `- ${project.name}: ${project.fileCount} indexed files; tags ${(project.tags || []).slice(0, 10).join(", ") || "none"}${remote}`;
+    }) : ["- none"]),
+    "",
+    "## Evidence Files",
+    "",
+    ...(topFiles.length ? topFiles.map((file) => {
+      const snippet = file.snippet ? `\n  - snippet: ${file.snippet}` : "";
+      return `- ${file.title || basename(file.path || "")}\n  - path: ${file.path || file.relativePath || ""}\n  - updated: ${file.updatedAt || "unknown"}\n  - tags: ${(file.tags || []).slice(0, 10).join(", ") || "none"}${snippet}`;
+    }) : ["- none"]),
+    "",
+    "## Recent Agent Sessions",
+    "",
+    ...(topSessions.length ? topSessions.map((session) => {
+      return `- ${session.title || session.id}\n  - system: ${session.system || "unknown"}\n  - updated: ${session.updatedAt || "unknown"}\n  - tags: ${(session.tags || []).slice(0, 10).join(", ") || "none"}`;
+    }) : ["- none"]),
+    "",
+    "## Next Analysis Prompts",
+    "",
+    `- What decisions or open tasks are concentrated in ${label}?`,
+    `- Which files should be promoted from raw evidence into compiled wiki pages for ${label}?`,
+    `- Are any high-weight projects missing backlinks to this ${kind}?`,
+    "",
+    "## CLI Follow-ups",
+    "",
+    kind === "tag"
+      ? `- npm run workdb -- search "${label}"`
+      : `- npm run workdb -- analyze-cluster "${id}"`,
+    "- npm run workdb -- tags --limit 40"
+  ];
+
+  return `${lines.join("\n")}\n`;
+}
+
+function analyzeScope({ kind, id, label, matcher, flags }) {
+  const db = loadDb();
+  const limit = Number(flags.limit || 30);
+  const files = loadJsonl(filesPath).filter(matcher);
+  const projects = (db.projects || []).filter(matcher);
+  const sessions = loadJsonl(sessionsPath).filter(matcher);
+  const relatedTags = topRelatedTags([...files, ...projects, ...sessions]);
+  const analysisDir = join(outputRoot, "analysis");
+  mkdirSync(analysisDir, { recursive: true });
+  const reportPath = join(analysisDir, `${kind}-${slugify(id || label)}.md`);
+  const manifestPath = join(analysisDir, `${kind}-${slugify(id || label)}.json`);
+  const markdown = analysisMarkdown({ kind, id, label, rows: files, projects, sessions, relatedTags, limit });
+  writeFileSync(reportPath, markdown, "utf8");
+  writeFileSync(manifestPath, JSON.stringify({
+    generatedAt: new Date().toISOString(),
+    kind,
+    id,
+    label,
+    counts: {
+      files: files.length,
+      projects: projects.length,
+      sessions: sessions.length,
+      relatedTags: relatedTags.length
+    },
+    files: files.map((file) => ({
+      id: file.id,
+      title: file.title,
+      path: file.path,
+      relativePath: file.relativePath,
+      updatedAt: file.updatedAt,
+      sourceRoot: file.sourceRoot,
+      sensitive: file.sensitive,
+      compileStatus: file.compileStatus,
+      tags: file.tags || []
+    })),
+    projects: projects.map((project) => ({
+      id: project.id,
+      name: project.name,
+      path: project.path,
+      remote: project.remote,
+      fileCount: project.fileCount,
+      tags: project.tags || []
+    })),
+    sessions: sessions.map((session) => ({
+      id: session.id,
+      system: session.system,
+      title: session.title,
+      updatedAt: session.updatedAt,
+      path: session.path,
+      tags: session.tags || []
+    })),
+    relatedTags
+  }, null, 2), "utf8");
+
+  const result = {
+    reportPath,
+    manifestPath,
+    relativePath: relative(root, reportPath),
+    manifestRelativePath: relative(root, manifestPath),
+    files: files.length,
+    projects: projects.length,
+    sessions: sessions.length,
+    relatedTags: relatedTags.length
+  };
+
+  if (flags.json) console.log(JSON.stringify(result, null, 2));
+  else if (!flags.silent) {
+    console.log(`Wrote ${relative(root, reportPath)}.`);
+    console.log(`Matched ${files.length} files, ${projects.length} projects, ${sessions.length} sessions, ${relatedTags.length} related tags.`);
+  }
+  return result;
+}
+
+function analyzeTag(flags) {
+  const tag = flags._.join(" ").trim().toLowerCase();
+  if (!tag) throw new Error("Usage: npm run workdb -- analyze-tag <tag> [--limit 30]");
+  analyzeScope({ kind: "tag", id: tag, label: tag, matcher: tagMatcher(tag), flags });
+}
+
+function analyzeCluster(flags) {
+  const raw = flags._.join(" ").trim().toLowerCase();
+  if (!raw) throw new Error("Usage: npm run workdb -- analyze-cluster <cluster-id-or-label> [--limit 30]");
+  const cluster = themeClusters.find((item) => item.id === raw || item.label.toLowerCase() === raw);
+  if (!cluster) throw new Error(`Unknown cluster: ${raw}. Available: ${themeClusters.map((item) => item.id).join(", ")}`);
+  analyzeScope({ kind: "cluster", id: cluster.id, label: cluster.label, matcher: clusterMatcher(cluster.id), flags });
+}
+
+function runAnalysis(kind, id, limit = 30) {
+  const normalizedKind = String(kind || "").trim().toLowerCase();
+  const normalizedId = String(id || "").trim().toLowerCase();
+  const flags = { _: [], limit, silent: true };
+  if (normalizedKind === "tag") {
+    if (!normalizedId) throw new Error("Missing tag id.");
+    return analyzeScope({ kind: "tag", id: normalizedId, label: normalizedId, matcher: tagMatcher(normalizedId), flags });
+  }
+  if (normalizedKind === "cluster") {
+    const cluster = themeClusters.find((item) => item.id === normalizedId || item.label.toLowerCase() === normalizedId);
+    if (!cluster) throw new Error(`Unknown cluster: ${normalizedId}`);
+    return analyzeScope({ kind: "cluster", id: cluster.id, label: cluster.label, matcher: clusterMatcher(cluster.id), flags });
+  }
+  throw new Error(`Unsupported analysis kind: ${kind}`);
+}
+
 function refreshExternal() {
   mkdirSync(outputRoot, { recursive: true });
   const external = { generatedAt: new Date().toISOString(), github: {}, gcloud: {}, firebase: {} };
@@ -1490,6 +2447,93 @@ function refreshExternal() {
   console.log(`Wrote ${relative(root, externalPath)}.`);
 }
 
+function contentTypeFor(filePath) {
+  const extension = extname(filePath).toLowerCase();
+  if (extension === ".html") return "text/html; charset=utf-8";
+  if (extension === ".js" || extension === ".mjs") return "text/javascript; charset=utf-8";
+  if (extension === ".css") return "text/css; charset=utf-8";
+  if (extension === ".json") return "application/json; charset=utf-8";
+  if (extension === ".jsonl") return "application/x-ndjson; charset=utf-8";
+  if (extension === ".md") return "text/markdown; charset=utf-8";
+  if (extension === ".txt") return "text/plain; charset=utf-8";
+  return "application/octet-stream";
+}
+
+function readRequestJson(request) {
+  return new Promise((resolvePromise, reject) => {
+    let body = "";
+    request.setEncoding("utf8");
+    request.on("data", (chunk) => {
+      body += chunk;
+      if (body.length > 20000) {
+        reject(new Error("Request body too large."));
+        request.destroy();
+      }
+    });
+    request.on("end", () => {
+      try {
+        resolvePromise(body ? JSON.parse(body) : {});
+      } catch {
+        reject(new Error("Invalid JSON body."));
+      }
+    });
+    request.on("error", reject);
+  });
+}
+
+function sendJson(response, statusCode, payload) {
+  response.writeHead(statusCode, {
+    "content-type": "application/json; charset=utf-8",
+    "cache-control": "no-store"
+  });
+  response.end(JSON.stringify(payload, null, 2));
+}
+
+function serve(flags) {
+  if (!existsSync(join(outputRoot, "tag-cloud.html"))) build();
+  const host = String(flags.host || "127.0.0.1");
+  const port = Number(flags.port || 8765);
+  const server = createServer(async (request, response) => {
+    try {
+      const requestUrl = new URL(request.url || "/", `http://${host}:${port}`);
+      if (request.method === "POST" && requestUrl.pathname === "/api/analyze") {
+        const body = await readRequestJson(request);
+        const result = runAnalysis(body.kind, body.id, Number(body.limit || 30));
+        return sendJson(response, 200, {
+          ok: true,
+          ...result,
+          url: `/${relative(outputRoot, result.reportPath).split("/").map(encodeURIComponent).join("/")}`
+        });
+      }
+
+      if (request.method !== "GET" && request.method !== "HEAD") {
+        return sendJson(response, 405, { ok: false, error: "Method not allowed." });
+      }
+
+      const pathname = decodeURIComponent(requestUrl.pathname === "/" ? "/tag-cloud.html" : requestUrl.pathname);
+      const filePath = resolve(outputRoot, `.${pathname}`);
+      if (filePath !== outputRoot && !filePath.startsWith(`${outputRoot}/`)) {
+        return sendJson(response, 403, { ok: false, error: "Forbidden path." });
+      }
+      if (!existsSync(filePath) || !safeStat(filePath)?.isFile()) {
+        return sendJson(response, 404, { ok: false, error: "Not found." });
+      }
+      response.writeHead(200, {
+        "content-type": contentTypeFor(filePath),
+        "cache-control": "no-store"
+      });
+      if (request.method === "HEAD") return response.end();
+      response.end(readFileSync(filePath));
+    } catch (error) {
+      sendJson(response, 500, { ok: false, error: error.message });
+    }
+  });
+
+  server.listen(port, host, () => {
+    console.log(`Serving ${relative(root, outputRoot)} at http://${host}:${port}/tag-cloud.html`);
+  });
+}
+
 function help() {
   console.log(`Usage: npm run workdb -- <command>
 
@@ -1499,6 +2543,9 @@ Commands:
   search <query>        Search indexed files.
   project <query>       Show indexed project cards.
   tags [--limit N]      Print top tags.
+  analyze-tag <tag>     Write a markdown dossier for a tag.
+  analyze-cluster <id>  Write a markdown dossier for a theme cluster.
+  serve [--port 8765]   Serve the private graph and local analysis API.
   refresh-external      Query GitHub, gcloud, and Firebase inventory into the DB folder.
 `);
 }
@@ -1512,6 +2559,9 @@ try {
   else if (command === "search") search(flags);
   else if (command === "project") project(flags);
   else if (command === "tags") tags(flags);
+  else if (command === "analyze-tag") analyzeTag(flags);
+  else if (command === "analyze-cluster") analyzeCluster(flags);
+  else if (command === "serve") serve(flags);
   else if (command === "refresh-external") refreshExternal();
   else help();
 } catch (error) {

@@ -57,6 +57,9 @@ npm run workdb -- stats
 npm run workdb -- search "Drive Zone"
 npm run workdb -- project "Piano"
 npm run workdb -- tags --limit 40
+npm run workdb -- analyze-tag "firebase"
+npm run workdb -- analyze-cluster "cloud-auth"
+npm run workdb -- serve --port 8765
 ```
 
 The generator indexes local Codex Projects, Codex daily workspaces, Codex memory files, Codex skills, Claude files, local git remotes, Codex session index, and optional GitHub/GCloud/Firebase inventory. Secret-looking files are indexed by metadata only and marked sensitive.
@@ -71,9 +74,20 @@ Generated private outputs include:
 - `chronology.jsonl` for the cross-source chronological work log
 - `catalog.md` for the inferred master catalog of current work clusters
 - `provenance.md` for `extracted`, `inferred`, and `ambiguous` rules
-- `tag-cloud.html` for the interactive Obsidian/Hermes-style memory graph
+- `tag-cloud.html` for the interactive Obsidian/Hermes-style clustered memory graph
+- `analysis/` for generated markdown dossiers and JSON manifests created from graph tag/cluster analysis commands
 
 Raw source files are the diary layer. The generated registry and chronology are rebuildable indexes over that layer, not append-only audit logs.
+
+The canvas renders a readable overview graph, not all 80k+ files as individual dots. The full base remains reachable through drill-down counts, analysis reports, and JSON manifests.
+
+Open the private graph through the local server when you want in-graph analysis buttons to run directly:
+
+```bash
+npm run workdb -- serve --port 8765
+```
+
+Then open `http://127.0.0.1:8765/tag-cloud.html`. The same HTML still works as a static file, but static mode cannot execute local CLI analysis; it falls back to showing/copying the command.
 
 The page presents a filesystem-first research workflow:
 
@@ -96,6 +110,7 @@ Run:
 ```bash
 node scripts/validate-static.mjs
 node scripts/validate-vault.mjs
+node scripts/validate-workdb.mjs
 node scripts/build-pages.mjs
 ```
 
@@ -123,13 +138,7 @@ vaults/main/checks/{checkId}
 vaults/main/outputs/{outputId}
 ```
 
-Current setup blocker: Firebase Authentication still needs to be initialized in the Firebase Console and Google sign-in must be enabled for project `llm-knowledge-bases`. CLI/API initialization returned `CONFIGURATION_NOT_FOUND`, and the API init route requires billing-enabled Identity Platform.
-
-Manual console path:
-
-```text
-Firebase Console -> llm-knowledge-bases -> Authentication -> Get started -> Sign-in method -> Google -> Enable -> Save
-```
+Firebase Authentication is initialized for project `llm-knowledge-bases`, Google sign-in is enabled, and the current authorized domains include Firebase Hosting plus `j3d1-fm.github.io` for GitHub Pages.
 
 Seed or refresh Firestore from the markdown vault with:
 
@@ -147,4 +156,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.7.0`
+Current version: `v0.8.0`

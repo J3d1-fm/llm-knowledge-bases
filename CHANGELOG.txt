@@ -1,5 +1,16 @@
 LLM Knowledge Bases Changelog
 
+Version v0.8.0 - 2026-06-16
+- Rebuilt the private tag-cloud output as a clustered memory graph instead of a ring-style node map.
+- Added explicit theme cluster nodes and cluster membership for tags, projects, raw samples, sessions, repos, and cloud resources.
+- Added hover magnification, pan/zoom, cluster focus controls, search focus, and a hidden-by-default inspector drawer so no details window blocks the initial graph.
+- Added graph actions that expose analysis commands for selected tags and clusters.
+- Added workdb analyze-tag and analyze-cluster commands that generate markdown dossiers under outputs/global-work-kb/analysis/.
+- Added a local workdb serve mode so the graph can run tag/cluster analysis through a localhost API and open the generated report.
+- Added full-scope analysis manifests for tag/cluster drill-downs, including all matched files, projects, sessions, and related tags.
+- Added workdb graph validation to the release validation path.
+- Updated docs and version metadata for the clustered memory graph release.
+
 Version v0.7.0 - 2026-06-15
 - Replaced the indirect tag cloud with an Obsidian/Hermes-style interactive memory graph centered on an agent memory lens.
 - Added graph nodes for projects, raw file samples, recent agent sessions, semantic tags, GitHub repos, GCloud projects, and Firebase projects.

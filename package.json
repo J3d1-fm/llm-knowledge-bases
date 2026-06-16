@@ -1,6 +1,6 @@
 {
   "name": "llm-knowledge-bases",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
     "kb:health": "node scripts/kb.mjs health",
     "kb:stats": "node scripts/kb.mjs stats",
     "seed:firestore": "node scripts/validate-vault.mjs && node scripts/seed-firestore.mjs",
-    "validate": "node scripts/validate-static.mjs && node scripts/smoke-app.mjs && node scripts/validate-vault.mjs",
+    "validate": "node scripts/validate-static.mjs && node scripts/smoke-app.mjs && node scripts/validate-vault.mjs && node scripts/validate-workdb.mjs",
     "validate:vault": "node scripts/validate-vault.mjs",
     "workdb": "node scripts/workdb.mjs",
     "workdb:build": "node scripts/workdb.mjs build",
