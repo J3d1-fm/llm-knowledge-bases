@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { knowledgeSeed } from "./knowledge-seed-data.mjs";
+import { buildRemoteWorkdbContext } from "./remote-workdb-context.mjs";
 
 const projectId = process.env.FIREBASE_PROJECT_ID || "llm-knowledge-bases";
 const databaseId = "(default)";
@@ -108,13 +109,23 @@ async function replaceCollection(token, collectionName, items) {
 
 async function main() {
   const token = getAccessToken();
-  await writeDocument(token, "vaults/main", knowledgeSeed.meta);
+  const remoteWorkdbContext = buildRemoteWorkdbContext({ write: true });
+  await writeDocument(token, "vaults/main", {
+    ...knowledgeSeed.meta,
+    workdbItemCount: remoteWorkdbContext.counts.items,
+    workdbFileCount: remoteWorkdbContext.counts.files,
+    workdbProjectCount: remoteWorkdbContext.counts.projects,
+    workdbSessionCount: remoteWorkdbContext.counts.codexSessions + remoteWorkdbContext.counts.claudeSessions,
+    workdbGeneratedAt: remoteWorkdbContext.sourceGeneratedAt,
+    workdbPrivacyMode: remoteWorkdbContext.privacyMode
+  });
 
   for (const collectionName of ["articles", "sources", "checks", "outputs"]) {
     await replaceCollection(token, collectionName, knowledgeSeed[collectionName]);
   }
+  await replaceCollection(token, "workdbContext", remoteWorkdbContext.items);
 
-  console.log(`Seeded Firestore vault in ${projectId}.`);
+  console.log(`Seeded Firestore vault and ${remoteWorkdbContext.items.length} workdb context docs in ${projectId}.`);
 }
 
 main().catch((error) => {

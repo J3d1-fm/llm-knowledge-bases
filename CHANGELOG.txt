@@ -1,5 +1,11 @@
 LLM Knowledge Bases Changelog
 
+Version v0.10.0 - 2026-06-16
+- Added a remote-safe Work DB context builder that derives Firestore-ready project, cluster, tag, external, and summary documents from the private local workdb.
+- Extended Firestore seeding to upload the authenticated `workdbContext` collection while excluding local paths, snippets, file content, and git remotes.
+- Added a Work DB tab to the authenticated workspace with project/cluster/tag search, safety-boundary notes, metrics, and local Codex follow-up commands.
+- Added validation coverage for the remote context bundle privacy boundary.
+
 Version v0.9.1 - 2026-06-16
 - Updated the private work graph line renderer so long links use deterministic bend vertices instead of plain source-to-target strokes.
 - Added visible bend-point markers and stronger endpoint markers so every rendered link vertex has a dot, including zoomed-out and dimmed graph states.

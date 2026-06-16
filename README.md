@@ -62,6 +62,7 @@ npm run workdb -- show <graph-id-or-path>
 npm run workdb -- analyze-tag "firebase"
 npm run workdb -- analyze-cluster "cloud-auth"
 npm run workdb -- serve --port 8765
+npm run workdb:remote
 ```
 
 The generator indexes local Codex Projects, Codex daily workspaces, Codex memory files, Codex skills, Claude files, local git remotes, Codex session index, and optional GitHub/GCloud/Firebase inventory. Secret-looking files are indexed by metadata only and marked sensitive.
@@ -78,6 +79,7 @@ Generated private outputs include:
 - `provenance.md` for `extracted`, `inferred`, and `ambiguous` rules
 - `tag-cloud.html` for the interactive Obsidian/Hermes-style clustered memory graph
 - `analysis/` for generated markdown dossiers and JSON manifests created from graph tag/cluster analysis commands
+- `remote-workdb-context.json` for the authenticated Firestore Work DB context layer; it excludes local paths, snippets, file content, and git remotes
 
 Raw source files are the diary layer. The generated registry and chronology are rebuildable indexes over that layer, not append-only audit logs.
 
@@ -103,6 +105,8 @@ npm run workdb -- show <graph-id-or-path>
 ```
 
 The public site does not ship private paths or files. It includes only `assets/tag-cloud-snapshot.json`, a sanitized label-free visual snapshot generated from the private graph.
+
+The authenticated Firebase workspace can load a remote-safe Work DB context collection from Firestore. This is not a full raw file mirror. It contains project, cluster, tag, external-inventory, and summary cards with counts and local Codex follow-up commands. Use the local CLI for exact paths, previews, and source inspection.
 
 Open the private graph through the local server when you want in-graph analysis buttons to run directly:
 
@@ -159,6 +163,7 @@ vaults/main/articles/{articleId}
 vaults/main/sources/{sourceId}
 vaults/main/checks/{checkId}
 vaults/main/outputs/{outputId}
+vaults/main/workdbContext/{contextId}
 ```
 
 Firebase Authentication is initialized for project `llm-knowledge-bases`, Google sign-in is enabled, and the current authorized domains include Firebase Hosting plus `j3d1-fm.github.io` for GitHub Pages.
@@ -169,7 +174,7 @@ Seed or refresh Firestore from the markdown vault with:
 npm run seed:firestore
 ```
 
-The seed command validates the vault first, clears stale documents from the four managed collections, then writes the current markdown snapshot.
+The seed command validates the vault first, builds the remote-safe Work DB context from `outputs/global-work-kb/db.json`, clears stale managed documents, then writes the current markdown snapshot and `workdbContext` documents.
 
 ## Deploy Target
 
@@ -179,4 +184,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.9.1`
+Current version: `v0.10.0`

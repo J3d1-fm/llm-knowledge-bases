@@ -759,6 +759,54 @@ h3 {
   padding: 0.34rem 0.62rem;
 }
 
+.mini-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 20px 0 4px;
+}
+
+.mini-metric {
+  min-width: 0;
+  border: 1px solid rgba(244, 241, 232, 0.1);
+  border-radius: 8px;
+  background: rgba(244, 241, 232, 0.04);
+  padding: 12px;
+}
+
+.mini-metric span {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--quiet);
+  font-size: 0.7rem;
+  font-weight: 820;
+  text-transform: uppercase;
+}
+
+.mini-metric strong {
+  display: block;
+  overflow: hidden;
+  font-size: 1.2rem;
+  line-height: 1.1;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.command-list {
+  display: grid;
+  gap: 8px;
+}
+
+.command-list code {
+  display: block;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.warning-section {
+  border-color: rgba(244, 184, 76, 0.2);
+}
+
 .detail-section {
   border-top: 1px solid rgba(244, 241, 232, 0.1);
   margin-top: 24px;
@@ -994,6 +1042,10 @@ h3 {
 
   .kb-summary-grid,
   .kb-workbench {
+    grid-template-columns: 1fr;
+  }
+
+  .mini-metric-grid {
     grid-template-columns: 1fr;
   }
 

@@ -21,6 +21,7 @@ const required = [
   "scripts/build-pages.mjs",
   "scripts/kb.mjs",
   "scripts/load-vault.mjs",
+  "scripts/remote-workdb-context.mjs",
   "scripts/smoke-app.mjs",
   "scripts/validate-vault.mjs",
   "scripts/workdb.mjs",

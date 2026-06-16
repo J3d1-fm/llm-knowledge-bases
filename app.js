@@ -43,6 +43,7 @@ let knowledgeBase = null;
 
 const viewLabels = {
   articles: ["Articles", "Compiled wiki"],
+  workdb: ["Work DB", "Remote-safe work context"],
   sources: ["Sources", "Raw and derived source coverage"],
   checks: ["Health checks", "Integrity queue"],
   outputs: ["Outputs", "Filed research artifacts"]
@@ -86,8 +87,9 @@ async function loadKnowledgeBase() {
     throw new Error("Knowledge vault was not found in Firestore.");
   }
 
-  const [articles, sources, checks, outputs] = await Promise.all([
+  const [articles, workdbContext, sources, checks, outputs] = await Promise.all([
     loadCollection("articles"),
+    loadCollection("workdbContext"),
     loadCollection("sources"),
     loadCollection("checks"),
     loadCollection("outputs")
@@ -96,6 +98,7 @@ async function loadKnowledgeBase() {
   return {
     meta: vaultSnapshot.data(),
     articles,
+    workdb: workdbContext,
     sources,
     checks,
     outputs
@@ -108,7 +111,14 @@ async function loadCollection(name) {
 }
 
 function getCollection(view) {
-  return knowledgeBase[view] || [];
+  const items = knowledgeBase[view] || [];
+  if (view !== "workdb") return items;
+  const rank = { summary: 0, cluster: 1, project: 2, tag: 3, external: 4 };
+  return items.slice().sort((left, right) => {
+    return (rank[left.kind] ?? 9) - (rank[right.kind] ?? 9)
+      || Number(right.fileCount || right.recordCount || right.count || 0) - Number(left.fileCount || left.recordCount || left.count || 0)
+      || getItemTitle(left).localeCompare(getItemTitle(right));
+  });
 }
 
 function getItemTitle(item) {
@@ -134,10 +144,11 @@ function renderWorkspace() {
 
 function renderSummary() {
   const meta = knowledgeBase.meta;
+  const workSummary = knowledgeBase.workdb.find((item) => item.kind === "summary") || {};
   const stats = [
     ["Articles", meta.articleCount],
-    ["Sources", meta.sourceCount],
-    ["Outputs", meta.outputCount],
+    ["Work files", meta.workdbFileCount || workSummary.fileCount || 0],
+    ["Projects", meta.workdbProjectCount || workSummary.projectCount || 0],
     ["Integrity", `${meta.integrityScore}%`]
   ];
 
@@ -162,7 +173,9 @@ function renderList() {
 
   kbList.innerHTML = items.length ? items.map((item) => {
     const activeClass = item.id === activeItemId ? " is-active" : "";
-    const meta = item.type || item.kind || item.severity || item.status || "";
+    const meta = activeView === "workdb"
+      ? [item.kind, item.clusterLabel].filter(Boolean).join(" · ")
+      : item.type || item.kind || item.severity || item.status || "";
     return `
       <button class="kb-list-item${activeClass}" type="button" data-id="${escapeHtml(item.id)}">
         <span>${escapeHtml(meta)}</span>
@@ -219,6 +232,33 @@ function renderSourceRefs(ids = []) {
   `;
 }
 
+function renderMetricGrid(metrics = []) {
+  if (!metrics.length) return "";
+  return `
+    <div class="mini-metric-grid">
+      ${metrics.map(([label, value]) => `
+        <div class="mini-metric">
+          <span>${escapeHtml(label)}</span>
+          <strong>${escapeHtml(value)}</strong>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+function renderCommandBlock(commands = []) {
+  const rows = Array.isArray(commands) ? commands.filter(Boolean) : [commands].filter(Boolean);
+  if (!rows.length) return "";
+  return `
+    <section class="detail-section">
+      <h3>Local Codex follow-up</h3>
+      <div class="command-list">
+        ${rows.map((command) => `<code>${escapeHtml(command)}</code>`).join("")}
+      </div>
+    </section>
+  `;
+}
+
 function renderDetail(item) {
   if (!item) {
     detailPanel.innerHTML = `<p class="empty-state">Select an item to inspect it.</p>`;
@@ -246,6 +286,36 @@ function renderDetail(item) {
       <h2>${escapeHtml(item.title)}</h2>
       <p class="detail-summary">${escapeHtml(item.summary)}</p>
       ${renderLinkedArticles(item.usedBy)}
+    `;
+  }
+
+  if (activeView === "workdb") {
+    const metrics = [
+      ["Kind", item.kind],
+      item.fileCount !== undefined ? ["Files", item.fileCount] : null,
+      item.projectCount !== undefined ? ["Projects", item.projectCount] : null,
+      item.recordCount !== undefined ? ["Records", item.recordCount] : null,
+      item.codexSessionCount !== undefined ? ["Codex sessions", item.codexSessionCount] : null,
+      item.claudeSessionCount !== undefined ? ["Claude records", item.claudeSessionCount] : null
+    ].filter(Boolean);
+    const commands = item.localCommands || [item.localCommand, item.localSearchCommand].filter(Boolean);
+    detailPanel.innerHTML = `
+      <p class="eyebrow">${escapeHtml(item.kind)}${item.clusterLabel ? ` · ${escapeHtml(item.clusterLabel)}` : ""}</p>
+      <h2>${escapeHtml(item.title)}</h2>
+      <p class="detail-summary">${escapeHtml(item.summary)}</p>
+      ${renderTagList(item.tags)}
+      ${renderMetricGrid(metrics)}
+      <section class="detail-section">
+        <h3>Remote safety boundary</h3>
+        <p>${escapeHtml(item.privacyMode || item.provenance || "Remote copy excludes local paths, snippets, file content, and git remotes.")}</p>
+      </section>
+      ${item.hasSensitiveSignals ? `
+        <section class="detail-section warning-section">
+          <h3>Sensitive source signal</h3>
+          <p>This project has local sensitive markers. The remote record keeps only the flag and excludes exact paths, snippets, and secret-like tags.</p>
+        </section>
+      ` : ""}
+      ${renderCommandBlock(commands)}
     `;
   }
 

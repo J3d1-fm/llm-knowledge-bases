@@ -1,10 +1,12 @@
 import { existsSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = dirname(dirname(fileURLToPath(import.meta.url)));
 const outputRoot = join(root, "outputs", "global-work-kb");
 const graphPath = join(outputRoot, "tag-cloud.html");
+const remoteContextPath = join(outputRoot, "remote-workdb-context.json");
 const failures = [];
 
 if (!existsSync(join(outputRoot, "db.json"))) {
@@ -78,6 +80,26 @@ if (!failures.length) {
 const workdbSource = readFileSync(join(root, "scripts", "workdb.mjs"), "utf8");
 for (const snippet of ["/api/search", "/api/context", "/api/file", "/api/open", "function contextMarkdown", "function previewIndexedTarget"]) {
   if (!workdbSource.includes(snippet)) failures.push(`workdb server is missing required working-DB API snippet: ${snippet}`);
+}
+
+try {
+  execFileSync(process.execPath, [join(root, "scripts", "remote-workdb-context.mjs")], { stdio: "pipe" });
+  const remoteContext = JSON.parse(readFileSync(remoteContextPath, "utf8"));
+  const remoteContextRaw = JSON.stringify(remoteContext);
+  if (!Array.isArray(remoteContext.items) || remoteContext.items.length < 20) {
+    failures.push("Remote workdb context has too few documents.");
+  }
+  if (remoteContext.privacyMode !== "remote-index-no-paths-no-snippets-no-file-content") {
+    failures.push("Remote workdb context privacy mode is not explicit.");
+  }
+  if (remoteContextRaw.includes("/Users/") || remoteContextRaw.includes("file:///")) {
+    failures.push("Remote workdb context leaked a local path.");
+  }
+  if (remoteContextRaw.includes("\"path\"") || remoteContextRaw.includes("\"snippet\"") || remoteContextRaw.includes("\"remote\"")) {
+    failures.push("Remote workdb context includes raw path, snippet, or git remote fields.");
+  }
+} catch (error) {
+  failures.push(`Remote workdb context validation failed: ${error.message}`);
 }
 
 if (failures.length) {
