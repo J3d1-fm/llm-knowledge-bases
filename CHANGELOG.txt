@@ -1,5 +1,11 @@
 LLM Knowledge Bases Changelog
 
+Version v0.12.4 - 2026-06-22
+- Reworked the signed-in Work DB graph into a standalone graph explorer panel with its own header, toolbar, viewport stage, and expand/dock mode.
+- Added explicit zoom out, zoom in, Fit all, 1:1 reset, mouse-wheel zoom, double-click zoom, and drag-pan controls.
+- Added zoom-aware level-of-detail rendering so distant views draw only major graph nodes and core links, while smaller nodes and extra links appear progressively as the user zooms in.
+- Added runtime graph state markers, smoke validation, and a dedicated graph LOD validator for the standalone zoomable viewport contract.
+
 Version v0.12.3 - 2026-06-16
 - Made the signed-in Work DB graph interactive with hover/click hit-testing on canvas nodes.
 - Added an active graph inspector overlay with a working Open record action for mapped remote Work DB records.

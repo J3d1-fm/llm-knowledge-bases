@@ -48,18 +48,30 @@
         </aside>
 
         <section class="kb-main" aria-live="polite">
-          <section class="workdb-map" aria-label="Work DB tag cloud">
-            <canvas class="workdb-map-canvas" id="workdbSnapshot" tabindex="0" role="button" aria-label="Interactive Work DB tag cloud. Use arrow keys to move between records, then press Enter to open."></canvas>
-            <div class="workdb-map-meta">
-              <p class="eyebrow">Work graph</p>
-              <strong id="workdbMapStats">Loading map</strong>
+          <section class="workdb-map" aria-label="Work DB graph explorer">
+            <div class="workdb-map-header">
+              <div class="workdb-map-meta">
+                <p class="eyebrow">Work graph</p>
+                <strong id="workdbMapStats">Loading map</strong>
+              </div>
+              <div class="workdb-map-toolbar" aria-label="Graph controls">
+                <button class="graph-control" type="button" data-workdb-graph-action="zoom-out" aria-label="Zoom out">-</button>
+                <span class="graph-zoom-state" id="workdbZoomState">100%</span>
+                <button class="graph-control" type="button" data-workdb-graph-action="zoom-in" aria-label="Zoom in">+</button>
+                <button class="graph-control text-control" type="button" data-workdb-graph-action="fit">Fit all</button>
+                <button class="graph-control text-control" type="button" data-workdb-graph-action="reset">1:1</button>
+                <button class="graph-control text-control" type="button" data-workdb-graph-action="expand" aria-pressed="false">Expand</button>
+              </div>
             </div>
-            <aside class="workdb-map-inspector" id="workdbMapInspector" aria-live="polite" hidden>
-              <p class="eyebrow" id="workdbMapInspectorMeta">Selected node</p>
-              <strong id="workdbMapInspectorTitle">Select a node</strong>
-              <span id="workdbMapInspectorBody">Click a visible dot to open its Work DB record.</span>
-              <button class="mini-action" id="workdbMapInspectorAction" type="button">Open record</button>
-            </aside>
+            <div class="workdb-map-stage">
+              <canvas class="workdb-map-canvas" id="workdbSnapshot" tabindex="0" role="button" aria-label="Interactive Work DB graph. Drag to pan. Use graph controls or mouse wheel to zoom. Use arrow keys to move between records, then press Enter to open."></canvas>
+              <aside class="workdb-map-inspector" id="workdbMapInspector" aria-live="polite" hidden>
+                <p class="eyebrow" id="workdbMapInspectorMeta">Selected node</p>
+                <strong id="workdbMapInspectorTitle">Select a node</strong>
+                <span id="workdbMapInspectorBody">Click a visible dot to open its Work DB record.</span>
+                <button class="mini-action" id="workdbMapInspectorAction" type="button">Open record</button>
+              </aside>
+            </div>
           </section>
 
           <div class="kb-summary-grid" id="summaryGrid"></div>

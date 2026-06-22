@@ -77,6 +77,25 @@ if (
 }
 
 if (
+  !appHtml.includes('data-workdb-graph-action="zoom-out"')
+  || !appHtml.includes('data-workdb-graph-action="zoom-in"')
+  || !appHtml.includes('data-workdb-graph-action="fit"')
+  || !appHtml.includes('data-workdb-graph-action="reset"')
+  || !appHtml.includes('data-workdb-graph-action="expand"')
+  || !appJs.includes("function zoomWorkdbGraphAt")
+  || !appJs.includes("function fitWorkdbGraph")
+  || !appJs.includes("function resetWorkdbGraph")
+  || !appJs.includes("function bindWorkdbGraphControls")
+  || !appJs.includes("WORKDB_GRAPH_LOD")
+  || !appJs.includes("function visibleWorkdbRenderPoints")
+  || !appJs.includes("workdbVisibleNodes")
+  || !styles.includes(".workdb-map-stage")
+  || !styles.includes(".workdb-map.is-expanded")
+) {
+  failures.push("Work DB graph must be a standalone zoomable viewport with LOD rendering controls.");
+}
+
+if (
   !appJs.includes('const workdbMap = document.querySelector(".workdb-map");')
   || !appJs.includes("function updateViewState()")
   || !appJs.includes('workdbMap.hidden = activeView !== "workdb";')

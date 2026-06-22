@@ -197,4 +197,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.12.3`
+Current version: `v0.12.4`

@@ -44,6 +44,8 @@ const workdbMapInspectorMeta = document.querySelector("#workdbMapInspectorMeta")
 const workdbMapInspectorTitle = document.querySelector("#workdbMapInspectorTitle");
 const workdbMapInspectorBody = document.querySelector("#workdbMapInspectorBody");
 const workdbMapInspectorAction = document.querySelector("#workdbMapInspectorAction");
+const workdbZoomState = document.querySelector("#workdbZoomState");
+const workdbGraphControls = document.querySelectorAll("[data-workdb-graph-action]");
 
 let activeView = "workdb";
 let activeItemId = null;
@@ -55,6 +57,27 @@ let workdbNodeRecords = [];
 let workdbRenderPoints = [];
 let selectedWorkdbNodeIndex = null;
 let hoveredWorkdbNodeIndex = null;
+let workdbGraphZoom = 1;
+let workdbGraphPanX = 0;
+let workdbGraphPanY = 0;
+let workdbGraphHasFit = false;
+let workdbGraphIsPanning = false;
+let workdbGraphPointer = null;
+let workdbGraphPreventClick = false;
+let workdbGraphSuppressClickUntil = 0;
+let workdbGraphLastSize = null;
+let workdbGraphUserMoved = false;
+
+const WORKDB_GRAPH_MIN_ZOOM = 0.42;
+const WORKDB_GRAPH_MAX_ZOOM = 6;
+const WORKDB_GRAPH_FIT_PADDING = 48;
+const WORKDB_GRAPH_LOD = [
+  { maxNodes: 80, maxEdges: 140, minZoom: 0 },
+  { maxNodes: 150, maxEdges: 260, minZoom: 0.72 },
+  { maxNodes: 260, maxEdges: 480, minZoom: 1.05 },
+  { maxNodes: 420, maxEdges: 740, minZoom: 1.45 },
+  { maxNodes: Infinity, maxEdges: Infinity, minZoom: 2.05 }
+];
 
 const viewLabels = {
   articles: ["Articles", "Compiled wiki"],
@@ -241,20 +264,170 @@ function buildWorkdbNodeRecords(snapshot) {
   });
 }
 
-function workdbPoint(node, width, height, timestamp) {
-  const scale = Math.min(width, height) * 0.82;
-  const offsetX = width * 0.52;
-  const offsetY = height * 0.51;
+function clampWorkdbZoom(value) {
+  return Math.max(WORKDB_GRAPH_MIN_ZOOM, Math.min(WORKDB_GRAPH_MAX_ZOOM, value));
+}
+
+function workdbBaseScale(width, height) {
+  return Math.min(width, height) * 0.82;
+}
+
+function workdbRotatedPoint(node, timestamp) {
   const angle = Math.sin(timestamp / 150000 * Math.PI * 2) * (Math.PI / 180 * 2.4);
   const cos = Math.cos(angle);
   const sin = Math.sin(angle);
-  const x = node.x * cos - node.y * sin;
-  const y = node.x * sin + node.y * cos;
-  return { x: offsetX + x * scale, y: offsetY + y * scale };
+  return {
+    x: node.x * cos - node.y * sin,
+    y: node.x * sin + node.y * cos
+  };
+}
+
+function workdbPoint(node, width, height, timestamp) {
+  const scale = workdbBaseScale(width, height);
+  const point = workdbRotatedPoint(node, timestamp);
+  return {
+    x: width / 2 + workdbGraphPanX + point.x * scale * workdbGraphZoom,
+    y: height / 2 + workdbGraphPanY + point.y * scale * workdbGraphZoom
+  };
 }
 
 function workdbRadius(node) {
-  return Math.max(1.3, node.r * (node.t === "cluster" ? 0.4 : 0.32));
+  return Math.max(1.3, node.r * (node.t === "cluster" ? 0.4 : 0.32) * Math.sqrt(workdbGraphZoom));
+}
+
+function workdbNodeImportance(node, index) {
+  const typeWeight = {
+    memory: 120,
+    cluster: 112,
+    project: 84,
+    external: 78,
+    repo: 72,
+    cloud: 68,
+    firebase: 68,
+    tag: 56,
+    system: 46,
+    session: 42,
+    raw: 34
+  }[node.t] || 30;
+  return typeWeight + Number(node.r || 0) * 4 - index * 0.002;
+}
+
+function workdbNodeMinZoom(node) {
+  if (node.t === "memory" || node.t === "cluster") return 0;
+  if (node.t === "project" || node.t === "external" || node.t === "repo" || node.t === "cloud" || node.t === "firebase") {
+    if (node.r >= 10) return 0.62;
+    if (node.r >= 7) return 0.92;
+    return 1.25;
+  }
+  if (node.t === "tag") {
+    if (node.r >= 11) return 0.78;
+    if (node.r >= 8) return 1.08;
+    if (node.r >= 5) return 1.48;
+    return 2.05;
+  }
+  if (node.r >= 7) return 1.15;
+  if (node.r >= 4) return 1.62;
+  return 2.3;
+}
+
+function workdbLodBudget() {
+  return WORKDB_GRAPH_LOD
+    .slice()
+    .reverse()
+    .find((level) => workdbGraphZoom >= level.minZoom) || WORKDB_GRAPH_LOD[0];
+}
+
+function workdbGraphBounds(snapshot) {
+  const nodes = snapshot.nodes || [];
+  if (!nodes.length) return { minX: -0.5, maxX: 0.5, minY: -0.5, maxY: 0.5 };
+  return nodes.reduce((bounds, node) => {
+    const pad = Math.max(0.018, Number(node.r || 1) / 900);
+    return {
+      minX: Math.min(bounds.minX, node.x - pad),
+      maxX: Math.max(bounds.maxX, node.x + pad),
+      minY: Math.min(bounds.minY, node.y - pad),
+      maxY: Math.max(bounds.maxY, node.y + pad)
+    };
+  }, { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
+}
+
+function fitWorkdbGraph(width, height, snapshot, force = false) {
+  if (!snapshot || (!force && workdbGraphHasFit)) return;
+  const bounds = workdbGraphBounds(snapshot);
+  const baseScale = workdbBaseScale(width, height);
+  const boundsWidth = Math.max(0.01, bounds.maxX - bounds.minX);
+  const boundsHeight = Math.max(0.01, bounds.maxY - bounds.minY);
+  const availableWidth = Math.max(120, width - WORKDB_GRAPH_FIT_PADDING * 2);
+  const availableHeight = Math.max(120, height - WORKDB_GRAPH_FIT_PADDING * 2);
+  workdbGraphZoom = clampWorkdbZoom(Math.min(
+    availableWidth / (boundsWidth * baseScale),
+    availableHeight / (boundsHeight * baseScale),
+    1.18
+  ));
+  workdbGraphPanX = -((bounds.minX + bounds.maxX) / 2) * baseScale * workdbGraphZoom;
+  workdbGraphPanY = -((bounds.minY + bounds.maxY) / 2) * baseScale * workdbGraphZoom;
+  workdbGraphHasFit = true;
+  workdbGraphUserMoved = false;
+}
+
+function resetWorkdbGraph(width, height, snapshot) {
+  workdbGraphZoom = 1;
+  const bounds = workdbGraphBounds(snapshot);
+  const baseScale = workdbBaseScale(width, height);
+  workdbGraphPanX = -((bounds.minX + bounds.maxX) / 2) * baseScale;
+  workdbGraphPanY = -((bounds.minY + bounds.maxY) / 2) * baseScale;
+  workdbGraphHasFit = true;
+  workdbGraphUserMoved = false;
+}
+
+function zoomWorkdbGraphAt(width, height, canvasX, canvasY, factor) {
+  const previousZoom = workdbGraphZoom;
+  const nextZoom = clampWorkdbZoom(previousZoom * factor);
+  if (nextZoom === previousZoom) return;
+  const anchorX = canvasX - width / 2 - workdbGraphPanX;
+  const anchorY = canvasY - height / 2 - workdbGraphPanY;
+  const ratio = nextZoom / previousZoom;
+  workdbGraphPanX = canvasX - width / 2 - anchorX * ratio;
+  workdbGraphPanY = canvasY - height / 2 - anchorY * ratio;
+  workdbGraphZoom = nextZoom;
+  workdbGraphUserMoved = true;
+}
+
+function visibleWorkdbRenderPoints(nodes, width, height, timestamp) {
+  const budget = workdbLodBudget();
+  const forced = new Set([selectedWorkdbNodeIndex, hoveredWorkdbNodeIndex].filter((index) => index !== null && index !== undefined));
+  const ranked = nodes
+    .map((node, index) => ({ node, index, importance: workdbNodeImportance(node, index) }))
+    .filter((item) => {
+      return forced.has(item.index)
+        || workdbGraphZoom >= workdbNodeMinZoom(item.node);
+    })
+    .sort((left, right) => right.importance - left.importance)
+    .slice(0, budget.maxNodes);
+  const visible = new Set(ranked.map((item) => item.index));
+  forced.forEach((index) => visible.add(index));
+
+  return nodes.map((node, index) => {
+    const isVisible = visible.has(index);
+    return {
+      index,
+      node,
+      visible: isVisible,
+      importance: workdbNodeImportance(node, index),
+      point: isVisible ? workdbPoint(node, width, height, timestamp) : null,
+      radius: isVisible ? workdbRadius(node) : 0
+    };
+  });
+}
+
+function updateWorkdbGraphState(visibleNodeCount, visibleEdgeCount) {
+  if (workdbZoomState) {
+    workdbZoomState.textContent = `${Math.round(workdbGraphZoom * 100)}%`;
+  }
+  document.documentElement.dataset.workdbGraphZoom = String(Number(workdbGraphZoom.toFixed(3)));
+  document.documentElement.dataset.workdbVisibleNodes = String(visibleNodeCount);
+  document.documentElement.dataset.workdbVisibleEdges = String(visibleEdgeCount);
+  document.documentElement.dataset.workdbTotalNodes = String(workdbSnapshotData?.nodes?.length || 0);
 }
 
 function drawWorkdbSnapshot(canvas, snapshot, timestamp) {
@@ -266,25 +439,34 @@ function drawWorkdbSnapshot(canvas, snapshot, timestamp) {
     canvas.width = Math.floor(width * ratio);
     canvas.height = Math.floor(height * ratio);
   }
+  if (!workdbGraphHasFit || !workdbGraphLastSize || Math.abs(workdbGraphLastSize.width - width) > 6 || Math.abs(workdbGraphLastSize.height - height) > 6) {
+    if (!workdbGraphUserMoved) {
+      fitWorkdbGraph(width, height, snapshot, true);
+    }
+    workdbGraphLastSize = { width, height };
+  }
 
   const ctx = canvas.getContext("2d");
   ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
   ctx.clearRect(0, 0, width, height);
 
   const nodes = snapshot.nodes || [];
-  workdbRenderPoints = nodes.map((node, index) => ({
-    index,
-    node,
-    point: workdbPoint(node, width, height, timestamp),
-    radius: workdbRadius(node)
-  }));
+  workdbRenderPoints = visibleWorkdbRenderPoints(nodes, width, height, timestamp);
+  const visibleCount = workdbRenderPoints.filter((item) => item.visible).length;
+  const budget = workdbLodBudget();
 
   ctx.lineWidth = 1;
-  for (const edge of (snapshot.edges || []).slice(0, 1000)) {
+  let visibleEdgeCount = 0;
+  for (const edge of (snapshot.edges || [])) {
     const source = workdbRenderPoints[edge.s];
     const target = workdbRenderPoints[edge.t];
-    if (!source || !target) continue;
-    ctx.strokeStyle = "rgba(236, 240, 234, 0.085)";
+    if (!source?.visible || !target?.visible) continue;
+    if (visibleEdgeCount >= budget.maxEdges) continue;
+    const edgeStrength = Math.min(source.importance, target.importance);
+    if (workdbGraphZoom < 0.78 && edgeStrength < 86) continue;
+    if (workdbGraphZoom < 1.08 && edgeStrength < 70) continue;
+    visibleEdgeCount += 1;
+    ctx.strokeStyle = workdbGraphZoom < 0.78 ? "rgba(236, 240, 234, 0.12)" : "rgba(236, 240, 234, 0.082)";
     ctx.beginPath();
     ctx.moveTo(source.point.x, source.point.y);
     ctx.lineTo(target.point.x, target.point.y);
@@ -292,10 +474,11 @@ function drawWorkdbSnapshot(canvas, snapshot, timestamp) {
   }
 
   for (const item of workdbRenderPoints) {
+    if (!item.visible) continue;
     const { index, node, point, radius } = item;
     const isActive = index === selectedWorkdbNodeIndex;
     const isHovered = index === hoveredWorkdbNodeIndex;
-    ctx.globalAlpha = isActive ? 0.98 : isHovered ? 0.84 : node.t === "cluster" ? 0.76 : 0.56;
+    ctx.globalAlpha = isActive ? 0.98 : isHovered ? 0.84 : node.t === "cluster" || node.t === "memory" ? 0.84 : 0.62;
     ctx.fillStyle = node.c || "#d7d7d2";
     ctx.beginPath();
     ctx.arc(point.x, point.y, radius + (isActive ? 1.6 : isHovered ? 1 : 0), 0, Math.PI * 2);
@@ -303,7 +486,7 @@ function drawWorkdbSnapshot(canvas, snapshot, timestamp) {
   }
 
   for (const item of workdbRenderPoints) {
-    if (item.index !== selectedWorkdbNodeIndex && item.index !== hoveredWorkdbNodeIndex) continue;
+    if (!item.visible || (item.index !== selectedWorkdbNodeIndex && item.index !== hoveredWorkdbNodeIndex)) continue;
     ctx.globalAlpha = item.index === selectedWorkdbNodeIndex ? 0.9 : 0.55;
     ctx.strokeStyle = item.index === selectedWorkdbNodeIndex ? "rgba(107, 242, 220, 0.95)" : "rgba(244, 241, 232, 0.76)";
     ctx.lineWidth = item.index === selectedWorkdbNodeIndex ? 2 : 1.4;
@@ -312,6 +495,7 @@ function drawWorkdbSnapshot(canvas, snapshot, timestamp) {
     ctx.stroke();
   }
   ctx.globalAlpha = 1;
+  updateWorkdbGraphState(visibleCount, visibleEdgeCount);
 }
 
 function findWorkdbNodeAt(clientX, clientY) {
@@ -321,6 +505,7 @@ function findWorkdbNodeAt(clientX, clientY) {
   const y = clientY - rect.top;
   let best = null;
   for (const item of workdbRenderPoints) {
+    if (!item.visible || !item.point) continue;
     const dx = item.point.x - x;
     const dy = item.point.y - y;
     const distance = Math.hypot(dx, dy);
@@ -392,8 +577,11 @@ function selectWorkdbNode(index) {
 }
 
 function moveWorkdbNodeSelection(step) {
-  const mappedIndexes = workdbNodeRecords
-    .map((record, index) => record ? index : null)
+  const visibleMappedIndexes = workdbRenderPoints
+    .filter((point) => point.visible && workdbNodeRecords[point.index])
+    .map((point) => point.index);
+  const mappedIndexes = (visibleMappedIndexes.length ? visibleMappedIndexes : workdbNodeRecords
+    .map((record, index) => record ? index : null))
     .filter((index) => index !== null);
   if (!mappedIndexes.length) return;
 
@@ -408,10 +596,57 @@ function bindWorkdbMapEvents() {
   if (!workdbSnapshot || workdbSnapshot.dataset.bound === "true") return;
   workdbSnapshot.dataset.bound = "true";
 
-  workdbSnapshot.addEventListener("mousemove", (event) => {
+  workdbSnapshot.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    workdbGraphIsPanning = true;
+    workdbGraphPreventClick = false;
+    workdbGraphPointer = {
+      id: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      x: event.clientX,
+      y: event.clientY
+    };
+    workdbSnapshot.setPointerCapture?.(event.pointerId);
+    workdbSnapshot.classList.add("is-panning");
+  });
+
+  workdbSnapshot.addEventListener("pointermove", (event) => {
+    if (workdbGraphIsPanning && workdbGraphPointer?.id === event.pointerId) {
+      const dx = event.clientX - workdbGraphPointer.x;
+      const dy = event.clientY - workdbGraphPointer.y;
+      const totalDx = event.clientX - workdbGraphPointer.startX;
+      const totalDy = event.clientY - workdbGraphPointer.startY;
+      if (Math.hypot(totalDx, totalDy) > 1.5) {
+        workdbGraphPreventClick = true;
+        workdbGraphSuppressClickUntil = Date.now() + 350;
+        workdbGraphUserMoved = true;
+      }
+      workdbGraphPanX += dx;
+      workdbGraphPanY += dy;
+      workdbGraphPointer.x = event.clientX;
+      workdbGraphPointer.y = event.clientY;
+      event.preventDefault();
+      return;
+    }
     const index = findWorkdbNodeAt(event.clientX, event.clientY);
     hoveredWorkdbNodeIndex = index;
     workdbSnapshot.classList.toggle("is-clickable", index !== null);
+  });
+
+  workdbSnapshot.addEventListener("pointerup", (event) => {
+    if (workdbGraphPointer?.id === event.pointerId) {
+      workdbGraphIsPanning = false;
+      workdbGraphPointer = null;
+      workdbSnapshot.releasePointerCapture?.(event.pointerId);
+      workdbSnapshot.classList.remove("is-panning");
+    }
+  });
+
+  workdbSnapshot.addEventListener("pointercancel", () => {
+    workdbGraphIsPanning = false;
+    workdbGraphPointer = null;
+    workdbSnapshot.classList.remove("is-panning");
   });
 
   workdbSnapshot.addEventListener("mouseleave", () => {
@@ -420,8 +655,25 @@ function bindWorkdbMapEvents() {
   });
 
   workdbSnapshot.addEventListener("click", (event) => {
+    if (workdbGraphPreventClick || Date.now() < workdbGraphSuppressClickUntil) {
+      workdbGraphPreventClick = false;
+      return;
+    }
     selectWorkdbNode(findWorkdbNodeAt(event.clientX, event.clientY));
   });
+
+  workdbSnapshot.addEventListener("dblclick", (event) => {
+    const rect = workdbSnapshot.getBoundingClientRect();
+    zoomWorkdbGraphAt(rect.width, rect.height, event.clientX - rect.left, event.clientY - rect.top, 1.55);
+    event.preventDefault();
+  });
+
+  workdbSnapshot.addEventListener("wheel", (event) => {
+    const rect = workdbSnapshot.getBoundingClientRect();
+    const factor = event.deltaY > 0 ? 0.86 : 1.16;
+    zoomWorkdbGraphAt(rect.width, rect.height, event.clientX - rect.left, event.clientY - rect.top, factor);
+    event.preventDefault();
+  }, { passive: false });
 
   workdbSnapshot.addEventListener("keydown", (event) => {
     if (event.key === "ArrowRight" || event.key === "ArrowDown") {
@@ -438,7 +690,49 @@ function bindWorkdbMapEvents() {
       const index = hoveredWorkdbNodeIndex ?? selectedWorkdbNodeIndex ?? 0;
       selectWorkdbNode(index);
       event.preventDefault();
+      return;
     }
+    if (event.key === "+" || event.key === "=" || event.key === "-") {
+      const rect = workdbSnapshot.getBoundingClientRect();
+      zoomWorkdbGraphAt(rect.width, rect.height, rect.width / 2, rect.height / 2, event.key === "-" ? 0.86 : 1.16);
+      event.preventDefault();
+      return;
+    }
+    if (event.key === "0") {
+      const rect = workdbSnapshot.getBoundingClientRect();
+      resetWorkdbGraph(rect.width, rect.height, workdbSnapshotData);
+      event.preventDefault();
+      return;
+    }
+    if (event.key.toLowerCase() === "f") {
+      const rect = workdbSnapshot.getBoundingClientRect();
+      fitWorkdbGraph(rect.width, rect.height, workdbSnapshotData, true);
+      event.preventDefault();
+    }
+  });
+}
+
+function bindWorkdbGraphControls() {
+  workdbGraphControls.forEach((button) => {
+    if (button.dataset.bound === "true") return;
+    button.dataset.bound = "true";
+    button.addEventListener("click", () => {
+      if (!workdbSnapshot || !workdbSnapshotData) return;
+      const rect = workdbSnapshot.getBoundingClientRect();
+      const action = button.dataset.workdbGraphAction;
+      if (action === "zoom-out") zoomWorkdbGraphAt(rect.width, rect.height, rect.width / 2, rect.height / 2, 0.78);
+      if (action === "zoom-in") zoomWorkdbGraphAt(rect.width, rect.height, rect.width / 2, rect.height / 2, 1.28);
+      if (action === "fit") fitWorkdbGraph(rect.width, rect.height, workdbSnapshotData, true);
+      if (action === "reset") resetWorkdbGraph(rect.width, rect.height, workdbSnapshotData);
+      if (action === "expand" && workdbMap) {
+        const expanded = !workdbMap.classList.contains("is-expanded");
+        workdbMap.classList.toggle("is-expanded", expanded);
+        button.setAttribute("aria-pressed", String(expanded));
+        button.textContent = expanded ? "Dock" : "Expand";
+        workdbGraphLastSize = null;
+        if (!workdbGraphUserMoved) fitWorkdbGraph(rect.width, rect.height, workdbSnapshotData, true);
+      }
+    });
   });
 }
 
@@ -452,6 +746,7 @@ async function startWorkdbSnapshot() {
     renderWorkdbMapInspector(selectedWorkdbNodeIndex);
   }
   bindWorkdbMapEvents();
+  bindWorkdbGraphControls();
   if (workdbMapStats) {
     const counts = workdbSnapshotData.counts || {};
     workdbMapStats.textContent = `${counts.nodes || workdbSnapshotData.nodes?.length || 0} nodes · ${counts.edges || workdbSnapshotData.edges?.length || 0} links`;
