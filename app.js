@@ -44,7 +44,6 @@ const workdbMapInspectorMeta = document.querySelector("#workdbMapInspectorMeta")
 const workdbMapInspectorTitle = document.querySelector("#workdbMapInspectorTitle");
 const workdbMapInspectorBody = document.querySelector("#workdbMapInspectorBody");
 const workdbMapInspectorAction = document.querySelector("#workdbMapInspectorAction");
-const workdbZoomState = document.querySelector("#workdbZoomState");
 const workdbGraphControls = document.querySelectorAll("[data-workdb-graph-action]");
 
 let activeView = "workdb";
@@ -54,6 +53,8 @@ let knowledgeBase = null;
 let workdbSnapshotData = null;
 let workdbSnapshotStarted = false;
 let workdbNodeRecords = [];
+let workdbGraphCache = null;
+let workdbAgentEdges = [];
 let workdbRenderPoints = [];
 let selectedWorkdbNodeIndex = null;
 let hoveredWorkdbNodeIndex = null;
@@ -63,14 +64,21 @@ let workdbGraphPanY = 0;
 let workdbGraphHasFit = false;
 let workdbGraphIsPanning = false;
 let workdbGraphPointer = null;
+let workdbGraphPointers = new Map();
+let workdbGraphPinch = null;
 let workdbGraphPreventClick = false;
 let workdbGraphSuppressClickUntil = 0;
 let workdbGraphLastSize = null;
 let workdbGraphUserMoved = false;
+let workdbGraphFrame = 0;
+let workdbGraphLens = "map";
+let workdbResizeObserver = null;
 
 const WORKDB_GRAPH_MIN_ZOOM = 0.42;
 const WORKDB_GRAPH_MAX_ZOOM = 6;
 const WORKDB_GRAPH_FIT_PADDING = 48;
+const KNOWLEDGE_CACHE_VERSION = "v0.12.5";
+const KNOWLEDGE_CACHE_TTL_MS = 4 * 60 * 1000;
 const WORKDB_GRAPH_LOD = [
   { maxNodes: 80, maxEdges: 140, minZoom: 0 },
   { maxNodes: 150, maxEdges: 260, minZoom: 0.72 },
@@ -78,6 +86,23 @@ const WORKDB_GRAPH_LOD = [
   { maxNodes: 420, maxEdges: 740, minZoom: 1.45 },
   { maxNodes: Infinity, maxEdges: Infinity, minZoom: 2.05 }
 ];
+
+const AGENT_SIGNAL_GROUPS = [
+  { key: "instructions", label: "Instruction reuse", tags: ["agent", "codex", "claude", "memory", "session", "skill", "tasks", "tracker"] },
+  { key: "automation", label: "Automation reuse", tags: ["automation", "telegram", "notifier", "schedule", "workflow"] },
+  { key: "data", label: "Data/report reuse", tags: ["analytics", "dashboard", "data", "drive-zone", "pdmx", "proas", "reports"] },
+  { key: "cloud", label: "Cloud/auth reuse", tags: ["account", "auth", "cloud-auth", "firebase", "gcloud", "github", "google", "oauth"] },
+  { key: "product", label: "Product context reuse", tags: ["app", "budget", "digital", "ios", "piano", "product", "racers", "web"] }
+];
+
+const AGENT_EDGE_COLORS = {
+  instructions: "rgba(107, 242, 220, 0.78)",
+  automation: "rgba(244, 196, 109, 0.72)",
+  data: "rgba(149, 184, 255, 0.72)",
+  cloud: "rgba(215, 167, 255, 0.72)",
+  product: "rgba(255, 158, 125, 0.68)",
+  shared: "rgba(244, 241, 232, 0.42)"
+};
 
 const viewLabels = {
   articles: ["Articles", "Compiled wiki"],
@@ -102,12 +127,42 @@ function emailAllowed(email) {
 }
 
 function showGate() {
+  resetWorkdbGraphRuntime();
   authGate.hidden = false;
   knowledgeShell.hidden = true;
   signInButton.hidden = false;
   sessionState.hidden = true;
   sessionState.textContent = "";
   signOutButton.hidden = true;
+}
+
+function knowledgeCacheKey() {
+  return `lkb-knowledge:${currentUser?.email || "anonymous"}:${KNOWLEDGE_CACHE_VERSION}`;
+}
+
+function readKnowledgeCache() {
+  try {
+    const raw = window.sessionStorage?.getItem(knowledgeCacheKey());
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (!cached?.data || Date.now() - Number(cached.savedAt || 0) > KNOWLEDGE_CACHE_TTL_MS) return null;
+    if (!Array.isArray(cached.data.workdb) || !cached.data.workdb.length) return null;
+    if (!cached.data.workdb.some((item) => item.kind === "summary")) return null;
+    return cached.data;
+  } catch {
+    return null;
+  }
+}
+
+function writeKnowledgeCache(data) {
+  try {
+    window.sessionStorage?.setItem(knowledgeCacheKey(), JSON.stringify({
+      savedAt: Date.now(),
+      data
+    }));
+  } catch {
+    // Session cache is an optimization only; Firestore remains the source of truth.
+  }
 }
 
 async function showWorkspace(user) {
@@ -132,6 +187,21 @@ async function loadKnowledgeBase() {
   if (!vaultSnapshot.exists()) {
     throw new Error("Knowledge vault was not found in Firestore.");
   }
+  const liveMeta = vaultSnapshot.data();
+
+  const workdbSummaryRef = doc(db, "vaults", "main", "workdbContext", "summary-workdb");
+  const workdbSummarySnapshot = await getDoc(workdbSummaryRef);
+  if (!workdbSummarySnapshot.exists()) {
+    throw new Error("Firestore Work DB context is missing its summary document.");
+  }
+
+  const cached = readKnowledgeCache();
+  if (cached) {
+    return {
+      ...cached,
+      meta: liveMeta
+    };
+  }
 
   const [articles, workdbContext, sources, checks, outputs] = await Promise.all([
     loadCollection("articles"),
@@ -149,14 +219,16 @@ async function loadKnowledgeBase() {
     throw new Error("Firestore Work DB context is missing its summary document.");
   }
 
-  return {
-    meta: vaultSnapshot.data(),
+  const loaded = {
+    meta: liveMeta,
     articles,
     workdb: workdbContext,
     sources,
     checks,
     outputs
   };
+  writeKnowledgeCache(loaded);
+  return loaded;
 }
 
 async function loadCollection(name) {
@@ -181,6 +253,21 @@ function getItemTitle(item) {
 
 function getItemSummary(item) {
   return item.summary || item.finding || "";
+}
+
+function publicGraphKey(value) {
+  let hash = 2166136261;
+  const text = String(value || "");
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36).padStart(7, "0");
+}
+
+function normalizedClusterId(value) {
+  if (value === "apps-products") return "products-apps";
+  return value || "";
 }
 
 function itemMatches(item, query) {
@@ -240,9 +327,14 @@ async function loadWorkdbSnapshot() {
 function buildWorkdbNodeRecords(snapshot) {
   const source = getCollection("workdb");
   const byKind = new Map();
+  const byNodeKey = new Map();
+  const usedRecords = new Set();
   for (const item of source) {
     if (!byKind.has(item.kind)) byKind.set(item.kind, []);
     byKind.get(item.kind).push(item);
+    for (const key of workdbRecordGraphKeys(item)) {
+      if (!byNodeKey.has(key)) byNodeKey.set(key, item);
+    }
   }
   const cursor = new Map();
   const kindForType = {
@@ -254,18 +346,103 @@ function buildWorkdbNodeRecords(snapshot) {
   };
 
   return (snapshot.nodes || []).map((node) => {
+    if (node.k && byNodeKey.has(node.k)) {
+      const keyedRecord = byNodeKey.get(node.k);
+      usedRecords.add(keyedRecord);
+      return keyedRecord;
+    }
     const kind = kindForType[node.t];
     if (!kind) return null;
     const items = byKind.get(kind) || [];
-    if (kind === "summary") return items[0] || null;
-    const index = cursor.get(kind) || 0;
+    if (kind === "summary") {
+      const summary = items[0] || null;
+      if (summary) usedRecords.add(summary);
+      return summary;
+    }
+    let index = cursor.get(kind) || 0;
+    while (items[index] && usedRecords.has(items[index])) {
+      index += 1;
+    }
     cursor.set(kind, index + 1);
-    return items[index] || null;
+    const record = items[index] || null;
+    if (record) usedRecords.add(record);
+    return record;
   });
+}
+
+function workdbRecordGraphKeys(record) {
+  const ids = [];
+  if (record.kind === "summary") ids.push("memory:lens");
+  if (record.kind === "cluster") {
+    ids.push(`cluster:${record.clusterId}`);
+    ids.push(`cluster:${normalizedClusterId(record.clusterId)}`);
+  }
+  if (record.kind === "project" && record.projectId) ids.push(`project:${record.projectId}`);
+  if (record.kind === "tag" && record.tag) ids.push(`tag:${record.tag}`);
+  if (record.kind === "external" && record.externalId) ids.push(`external:${record.externalId}`);
+  return [...new Set(ids.filter(Boolean).map(publicGraphKey))];
+}
+
+function resetWorkdbGraphRuntime() {
+  if (workdbGraphFrame) {
+    window.cancelAnimationFrame?.(workdbGraphFrame);
+    workdbGraphFrame = 0;
+  }
+  workdbSnapshotStarted = false;
+  workdbSnapshotData = null;
+  workdbNodeRecords = [];
+  workdbGraphCache = null;
+  workdbAgentEdges = [];
+  workdbRenderPoints = [];
+  selectedWorkdbNodeIndex = null;
+  hoveredWorkdbNodeIndex = null;
+  workdbGraphZoom = 1;
+  workdbGraphPanX = 0;
+  workdbGraphPanY = 0;
+  workdbGraphHasFit = false;
+  workdbGraphIsPanning = false;
+  workdbGraphPointer = null;
+  workdbGraphPointers.clear();
+  workdbGraphPinch = null;
+  workdbGraphPreventClick = false;
+  workdbGraphSuppressClickUntil = 0;
+  workdbGraphLastSize = null;
+  workdbGraphUserMoved = false;
+  workdbGraphLens = "map";
+  workdbMap?.setAttribute("data-lens", "map");
+  workdbGraphControls.forEach((control) => {
+    const isMap = control.dataset.workdbGraphAction === "lens-map";
+    const isAgent = control.dataset.workdbGraphAction === "lens-agent";
+    if (isMap || isAgent) {
+      control.classList.toggle("is-active", isMap);
+      control.setAttribute("aria-pressed", String(isMap));
+    }
+    if (control.dataset.workdbGraphAction === "expand") {
+      control.setAttribute("aria-pressed", "false");
+      control.textContent = "Expand";
+    }
+  });
+  workdbMap?.classList.remove("is-expanded");
+  workdbSnapshot?.classList.remove("is-panning", "is-clickable");
+  if (workdbMapInspector) {
+    workdbMapInspector.hidden = true;
+    workdbMapInspector.classList.remove("is-anchored");
+    workdbMapInspector.removeAttribute("style");
+  }
+  if (workdbMapStats) workdbMapStats.textContent = "Loading map";
+  document.documentElement.dataset.workdbGraphZoom = "";
+  document.documentElement.dataset.workdbGraphLens = "";
+  document.documentElement.dataset.workdbVisibleNodes = "";
+  document.documentElement.dataset.workdbVisibleEdges = "";
+  document.documentElement.dataset.workdbTotalNodes = "";
 }
 
 function clampWorkdbZoom(value) {
   return Math.max(WORKDB_GRAPH_MIN_ZOOM, Math.min(WORKDB_GRAPH_MAX_ZOOM, value));
+}
+
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, value));
 }
 
 function workdbBaseScale(width, height) {
@@ -293,6 +470,13 @@ function workdbPoint(node, width, height, timestamp) {
 
 function workdbRadius(node) {
   return Math.max(1.3, node.r * (node.t === "cluster" ? 0.4 : 0.32) * Math.sqrt(workdbGraphZoom));
+}
+
+function workdbPointNearViewport(point, width, height, padding = 72) {
+  return point.x >= -padding
+    && point.x <= width + padding
+    && point.y >= -padding
+    && point.y <= height + padding;
 }
 
 function workdbNodeImportance(node, index) {
@@ -337,6 +521,93 @@ function workdbLodBudget() {
     .find((level) => workdbGraphZoom >= level.minZoom) || WORKDB_GRAPH_LOD[0];
 }
 
+function prepareWorkdbGraphCache(snapshot) {
+  const cachedNodes = (snapshot.nodes || []).map((node, index) => ({
+    node,
+    index,
+    importance: workdbNodeImportance(node, index),
+    minZoom: workdbNodeMinZoom(node)
+  }));
+  return {
+    nodes: cachedNodes,
+    rankedNodes: cachedNodes.slice().sort((left, right) => right.importance - left.importance),
+    edges: (snapshot.edges || []).map((edge, index) => ({
+      index,
+      source: edge.s,
+      target: edge.t
+    }))
+  };
+}
+
+function normalizedRecordTags(record) {
+  const values = [
+    ...(Array.isArray(record?.tags) ? record.tags : []),
+    record?.clusterId,
+    record?.clusterLabel,
+    record?.kind,
+    record?.externalId,
+    record?.tag
+  ].filter(Boolean);
+  return [...new Set(values.map((value) => String(value).toLowerCase().replaceAll(/\s+/g, "-")))];
+}
+
+function recordWeight(record) {
+  return Number(record?.fileCount || record?.recordCount || record?.projectCount || record?.count || 1);
+}
+
+function agentSignalForTags(tags) {
+  const tagSet = new Set(tags);
+  let best = { key: "shared", label: "Shared context", score: 0 };
+  for (const group of AGENT_SIGNAL_GROUPS) {
+    const score = group.tags.filter((tag) => tagSet.has(tag)).length;
+    if (score > best.score) best = { key: group.key, label: group.label, score };
+  }
+  return best;
+}
+
+function scoreAgentRelation(left, right) {
+  const leftTags = normalizedRecordTags(left.record);
+  const rightTags = normalizedRecordTags(right.record);
+  const rightTagSet = new Set(rightTags);
+  const sharedTags = leftTags.filter((tag) => rightTagSet.has(tag));
+  const sameCluster = Boolean(left.record?.clusterId && left.record.clusterId === right.record?.clusterId);
+  if (!sharedTags.length && !sameCluster) return null;
+  if (left.record?.kind === "tag" && right.record?.kind === "tag") return null;
+
+  const signal = agentSignalForTags(sharedTags);
+  let score = sharedTags.length * 14 + (sameCluster ? 16 : 0);
+  score += Math.log10(Math.max(10, recordWeight(left.record))) * 4;
+  score += Math.log10(Math.max(10, recordWeight(right.record))) * 4;
+  if (left.record?.kind === "cluster" || right.record?.kind === "cluster") score += 8;
+  if (left.record?.kind === "project" || right.record?.kind === "project") score += 5;
+  if (signal.key === "instructions") score += 7;
+
+  return {
+    source: left.index,
+    target: right.index,
+    score,
+    sharedTags: sharedTags.slice(0, 4),
+    signalKey: signal.key,
+    signalLabel: signal.label
+  };
+}
+
+function buildWorkdbAgentEdges() {
+  const records = workdbNodeRecords
+    .map((record, index) => ({ record, index }))
+    .filter((item) => item.record && item.record.kind !== "summary");
+  const edges = [];
+  for (let leftIndex = 0; leftIndex < records.length; leftIndex += 1) {
+    for (let rightIndex = leftIndex + 1; rightIndex < records.length; rightIndex += 1) {
+      const relation = scoreAgentRelation(records[leftIndex], records[rightIndex]);
+      if (relation) edges.push(relation);
+    }
+  }
+  return edges
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 220);
+}
+
 function workdbGraphBounds(snapshot) {
   const nodes = snapshot.nodes || [];
   if (!nodes.length) return { minX: -0.5, maxX: 0.5, minY: -0.5, maxY: 0.5 };
@@ -368,6 +639,7 @@ function fitWorkdbGraph(width, height, snapshot, force = false) {
   workdbGraphPanY = -((bounds.minY + bounds.maxY) / 2) * baseScale * workdbGraphZoom;
   workdbGraphHasFit = true;
   workdbGraphUserMoved = false;
+  scheduleWorkdbGraphDraw();
 }
 
 function resetWorkdbGraph(width, height, snapshot) {
@@ -378,6 +650,7 @@ function resetWorkdbGraph(width, height, snapshot) {
   workdbGraphPanY = -((bounds.minY + bounds.maxY) / 2) * baseScale;
   workdbGraphHasFit = true;
   workdbGraphUserMoved = false;
+  scheduleWorkdbGraphDraw();
 }
 
 function zoomWorkdbGraphAt(width, height, canvasX, canvasY, factor) {
@@ -391,43 +664,107 @@ function zoomWorkdbGraphAt(width, height, canvasX, canvasY, factor) {
   workdbGraphPanY = canvasY - height / 2 - anchorY * ratio;
   workdbGraphZoom = nextZoom;
   workdbGraphUserMoved = true;
+  scheduleWorkdbGraphDraw();
 }
 
 function visibleWorkdbRenderPoints(nodes, width, height, timestamp) {
   const budget = workdbLodBudget();
   const forced = new Set([selectedWorkdbNodeIndex, hoveredWorkdbNodeIndex].filter((index) => index !== null && index !== undefined));
-  const ranked = nodes
-    .map((node, index) => ({ node, index, importance: workdbNodeImportance(node, index) }))
+  const cache = workdbGraphCache || prepareWorkdbGraphCache({ nodes, edges: [] });
+  const ranked = cache.rankedNodes
     .filter((item) => {
       return forced.has(item.index)
-        || workdbGraphZoom >= workdbNodeMinZoom(item.node);
+        || workdbGraphZoom >= item.minZoom;
     })
-    .sort((left, right) => right.importance - left.importance)
     .slice(0, budget.maxNodes);
   const visible = new Set(ranked.map((item) => item.index));
   forced.forEach((index) => visible.add(index));
 
-  return nodes.map((node, index) => {
-    const isVisible = visible.has(index);
+  return cache.nodes.map((item) => {
+    const point = visible.has(item.index) ? workdbPoint(item.node, width, height, timestamp) : null;
+    const isVisible = Boolean(point && (forced.has(item.index) || workdbPointNearViewport(point, width, height, 140)));
     return {
-      index,
-      node,
+      index: item.index,
+      node: item.node,
       visible: isVisible,
-      importance: workdbNodeImportance(node, index),
-      point: isVisible ? workdbPoint(node, width, height, timestamp) : null,
-      radius: isVisible ? workdbRadius(node) : 0
+      importance: item.importance,
+      point: isVisible ? point : null,
+      radius: isVisible ? workdbRadius(item.node) : 0
     };
   });
 }
 
 function updateWorkdbGraphState(visibleNodeCount, visibleEdgeCount) {
-  if (workdbZoomState) {
-    workdbZoomState.textContent = `${Math.round(workdbGraphZoom * 100)}%`;
+  if (workdbMapStats) {
+    if (workdbGraphLens === "agent") {
+      workdbMapStats.textContent = `${visibleNodeCount} visible nodes · ${visibleEdgeCount} agent reuse routes`;
+    } else {
+      const counts = workdbSnapshotData?.counts || {};
+      workdbMapStats.textContent = `${counts.nodes || workdbSnapshotData?.nodes?.length || 0} nodes · ${counts.edges || workdbSnapshotData?.edges?.length || 0} links`;
+    }
   }
   document.documentElement.dataset.workdbGraphZoom = String(Number(workdbGraphZoom.toFixed(3)));
+  document.documentElement.dataset.workdbGraphLens = workdbGraphLens;
   document.documentElement.dataset.workdbVisibleNodes = String(visibleNodeCount);
   document.documentElement.dataset.workdbVisibleEdges = String(visibleEdgeCount);
   document.documentElement.dataset.workdbTotalNodes = String(workdbSnapshotData?.nodes?.length || 0);
+}
+
+function drawWorkdbBaseEdges(ctx, budget, width, height) {
+  const edges = workdbGraphCache?.edges || [];
+  const maxEdges = workdbGraphLens === "agent" ? Math.min(100, budget.maxEdges) : budget.maxEdges;
+  let visibleEdgeCount = 0;
+  ctx.lineWidth = workdbGraphLens === "agent" ? 0.7 : 1;
+  for (const edge of edges) {
+    const source = workdbRenderPoints[edge.source];
+    const target = workdbRenderPoints[edge.target];
+    if (!source?.visible || !target?.visible) continue;
+    if (!workdbPointNearViewport(source.point, width, height) || !workdbPointNearViewport(target.point, width, height)) continue;
+    if (visibleEdgeCount >= maxEdges) continue;
+    const edgeStrength = Math.min(source.importance, target.importance);
+    if (workdbGraphZoom < 0.78 && edgeStrength < 86) continue;
+    if (workdbGraphZoom < 1.08 && edgeStrength < 70) continue;
+    visibleEdgeCount += 1;
+    ctx.strokeStyle = workdbGraphLens === "agent"
+      ? "rgba(236, 240, 234, 0.045)"
+      : workdbGraphZoom < 0.78 ? "rgba(236, 240, 234, 0.12)" : "rgba(236, 240, 234, 0.082)";
+    ctx.beginPath();
+    ctx.moveTo(source.point.x, source.point.y);
+    ctx.lineTo(target.point.x, target.point.y);
+    ctx.stroke();
+  }
+  return visibleEdgeCount;
+}
+
+function drawWorkdbAgentEdges(ctx, width, height) {
+  if (workdbGraphLens !== "agent") return 0;
+  const maxEdges = workdbGraphZoom < 0.9 ? 28 : workdbGraphZoom < 1.45 ? 62 : 120;
+  let visibleEdgeCount = 0;
+  for (const edge of workdbAgentEdges) {
+    const source = workdbRenderPoints[edge.source];
+    const target = workdbRenderPoints[edge.target];
+    if (!source?.visible || !target?.visible) continue;
+    if (!workdbPointNearViewport(source.point, width, height) || !workdbPointNearViewport(target.point, width, height)) continue;
+    if (visibleEdgeCount >= maxEdges) break;
+    visibleEdgeCount += 1;
+    const dx = target.point.x - source.point.x;
+    const dy = target.point.y - source.point.y;
+    const distance = Math.max(1, Math.hypot(dx, dy));
+    const bend = Math.min(46, Math.max(12, distance * 0.08));
+    const normalX = -dy / distance;
+    const normalY = dx / distance;
+    const centerX = (source.point.x + target.point.x) / 2 + normalX * bend;
+    const centerY = (source.point.y + target.point.y) / 2 + normalY * bend;
+    ctx.globalAlpha = workdbGraphZoom < 0.9 ? 0.64 : 0.8;
+    ctx.lineWidth = Math.max(1, Math.min(2.4, edge.score / 42));
+    ctx.strokeStyle = AGENT_EDGE_COLORS[edge.signalKey] || AGENT_EDGE_COLORS.shared;
+    ctx.beginPath();
+    ctx.moveTo(source.point.x, source.point.y);
+    ctx.quadraticCurveTo(centerX, centerY, target.point.x, target.point.y);
+    ctx.stroke();
+  }
+  ctx.globalAlpha = 1;
+  return visibleEdgeCount;
 }
 
 function drawWorkdbSnapshot(canvas, snapshot, timestamp) {
@@ -454,31 +791,16 @@ function drawWorkdbSnapshot(canvas, snapshot, timestamp) {
   workdbRenderPoints = visibleWorkdbRenderPoints(nodes, width, height, timestamp);
   const visibleCount = workdbRenderPoints.filter((item) => item.visible).length;
   const budget = workdbLodBudget();
-
-  ctx.lineWidth = 1;
-  let visibleEdgeCount = 0;
-  for (const edge of (snapshot.edges || [])) {
-    const source = workdbRenderPoints[edge.s];
-    const target = workdbRenderPoints[edge.t];
-    if (!source?.visible || !target?.visible) continue;
-    if (visibleEdgeCount >= budget.maxEdges) continue;
-    const edgeStrength = Math.min(source.importance, target.importance);
-    if (workdbGraphZoom < 0.78 && edgeStrength < 86) continue;
-    if (workdbGraphZoom < 1.08 && edgeStrength < 70) continue;
-    visibleEdgeCount += 1;
-    ctx.strokeStyle = workdbGraphZoom < 0.78 ? "rgba(236, 240, 234, 0.12)" : "rgba(236, 240, 234, 0.082)";
-    ctx.beginPath();
-    ctx.moveTo(source.point.x, source.point.y);
-    ctx.lineTo(target.point.x, target.point.y);
-    ctx.stroke();
-  }
+  const baseEdgeCount = drawWorkdbBaseEdges(ctx, budget, width, height);
+  const agentEdgeCount = drawWorkdbAgentEdges(ctx, width, height);
+  const visibleEdgeCount = workdbGraphLens === "agent" ? agentEdgeCount : baseEdgeCount;
 
   for (const item of workdbRenderPoints) {
     if (!item.visible) continue;
     const { index, node, point, radius } = item;
     const isActive = index === selectedWorkdbNodeIndex;
     const isHovered = index === hoveredWorkdbNodeIndex;
-    ctx.globalAlpha = isActive ? 0.98 : isHovered ? 0.84 : node.t === "cluster" || node.t === "memory" ? 0.84 : 0.62;
+    ctx.globalAlpha = isActive ? 0.98 : isHovered ? 0.86 : node.t === "cluster" || node.t === "memory" ? 0.86 : workdbGraphLens === "agent" ? 0.72 : 0.62;
     ctx.fillStyle = node.c || "#d7d7d2";
     ctx.beginPath();
     ctx.arc(point.x, point.y, radius + (isActive ? 1.6 : isHovered ? 1 : 0), 0, Math.PI * 2);
@@ -496,6 +818,7 @@ function drawWorkdbSnapshot(canvas, snapshot, timestamp) {
   }
   ctx.globalAlpha = 1;
   updateWorkdbGraphState(visibleCount, visibleEdgeCount);
+  positionWorkdbMapInspector(selectedWorkdbNodeIndex);
 }
 
 function findWorkdbNodeAt(clientX, clientY) {
@@ -517,6 +840,97 @@ function findWorkdbNodeAt(clientX, clientY) {
   return best?.index ?? null;
 }
 
+function workdbAgentRelationsForIndex(index, limit = 3) {
+  return workdbAgentEdges
+    .filter((edge) => edge.source === index || edge.target === index)
+    .sort((left, right) => right.score - left.score)
+    .slice(0, limit);
+}
+
+function reusablePriority(record) {
+  const kind = record?.kind || "";
+  if (kind === "cluster") return 5;
+  if (kind === "external") return 4;
+  if (kind === "tag") return 3;
+  if (kind === "summary") return 2;
+  if (kind === "project") return 1;
+  return 0;
+}
+
+function agentRelationDirection(edge) {
+  const sourceRecord = workdbNodeRecords[edge.source];
+  const targetRecord = workdbNodeRecords[edge.target];
+  const sourcePriority = reusablePriority(sourceRecord);
+  const targetPriority = reusablePriority(targetRecord);
+  if (sourcePriority > targetPriority) return { fromIndex: edge.source, toIndex: edge.target };
+  if (targetPriority > sourcePriority) return { fromIndex: edge.target, toIndex: edge.source };
+  if (recordWeight(sourceRecord) >= recordWeight(targetRecord)) return { fromIndex: edge.source, toIndex: edge.target };
+  return { fromIndex: edge.target, toIndex: edge.source };
+}
+
+function agentHintForRecord(record) {
+  const tags = normalizedRecordTags(record);
+  const tagSet = new Set(tags);
+  if (["skill", "memory", "session", "codex", "claude", "tracker"].some((tag) => tagSet.has(tag))) {
+    return "Best reuse: start with this memory/instruction context before opening task-specific files.";
+  }
+  if (["automation", "telegram", "notifier", "workflow"].some((tag) => tagSet.has(tag))) {
+    return "Best reuse: compare automation flow, notification contract, and task state before rebuilding scripts.";
+  }
+  if (["data", "dashboard", "analytics", "reports"].some((tag) => tagSet.has(tag))) {
+    return "Best reuse: lift the analysis/reporting pattern and verify source freshness before touching raw exports.";
+  }
+  if (["github", "google", "gcloud", "firebase", "cloud-auth", "account"].some((tag) => tagSet.has(tag))) {
+    return "Best reuse: reuse the account, auth, deploy, and validation context before changing cloud setup.";
+  }
+  return "Best reuse: use this as a routing node, then open the local Work DB context only when exact files are needed.";
+}
+
+function agentInspectorText(index, record) {
+  if (!record) return "Private graph point. Agent lens keeps names and file content out of this browser asset.";
+  if (workdbGraphLens !== "agent") return getItemSummary(record);
+
+  const relation = workdbAgentRelationsForIndex(index, 1)[0];
+  if (!relation) return agentHintForRecord(record);
+  const direction = agentRelationDirection(relation);
+  const peerIndex = direction.fromIndex === index ? direction.toIndex : direction.fromIndex;
+  const peerRecord = workdbNodeRecords[peerIndex];
+  const peerTitle = peerRecord ? getItemTitle(peerRecord) : "nearby context";
+  const via = relation.sharedTags.length ? ` via ${relation.sharedTags.join(", ")}` : "";
+  const verb = direction.fromIndex === index ? "Reuse into" : "Reuse from";
+  return `${relation.signalLabel}: ${verb} ${peerTitle}${via}.`;
+}
+
+function positionWorkdbMapInspector(index) {
+  if (!workdbMapInspector || workdbMapInspector.hidden || index === null || index === undefined) return;
+  const stage = workdbSnapshot?.parentElement;
+  const item = workdbRenderPoints.find((point) => point.index === index && point.visible && point.point);
+  if (!stage || !item) {
+    workdbMapInspector.classList.remove("is-anchored");
+    return;
+  }
+
+  const inset = 12;
+  const stageWidth = stage.clientWidth;
+  const stageHeight = stage.clientHeight;
+  const inspectorWidth = Math.min(workdbMapInspector.offsetWidth || 280, Math.max(180, stageWidth - inset * 2));
+  const inspectorHeight = Math.min(workdbMapInspector.offsetHeight || 120, Math.max(90, stageHeight - inset * 2));
+  let left = item.point.x + 16;
+  if (left + inspectorWidth > stageWidth - inset) left = item.point.x - inspectorWidth - 16;
+  if (left < inset) {
+    left = clampNumber(item.point.x - inspectorWidth / 2, inset, Math.max(inset, stageWidth - inspectorWidth - inset));
+  }
+  let top = item.point.y - inspectorHeight - 14;
+  if (top < inset) top = item.point.y + 14;
+  top = clampNumber(top, inset, Math.max(inset, stageHeight - inspectorHeight - inset));
+
+  workdbMapInspector.style.left = `${Math.round(left)}px`;
+  workdbMapInspector.style.top = `${Math.round(top)}px`;
+  workdbMapInspector.style.right = "auto";
+  workdbMapInspector.style.bottom = "auto";
+  workdbMapInspector.classList.add("is-anchored");
+}
+
 function renderWorkdbMapInspector(index) {
   if (!workdbMapInspector || index === null || index === undefined) return;
   const node = workdbSnapshotData?.nodes?.[index];
@@ -532,19 +946,24 @@ function renderWorkdbMapInspector(index) {
     ? getItemTitle(record)
     : "Private index point";
   workdbMapInspectorBody.textContent = record
-    ? getItemSummary(record)
+    ? agentInspectorText(index, record)
     : "This point exists in the private graph snapshot. The public graph keeps raw names out of the browser asset.";
   workdbMapInspectorAction.hidden = !actionRecord;
   workdbMapInspectorAction.textContent = record ? "Open record" : "Open summary";
   workdbMapInspectorAction.dataset.recordId = actionRecord?.id || "";
+  positionWorkdbMapInspector(index);
+  scheduleWorkdbGraphDraw();
 }
 
 function hideWorkdbMapInspector() {
   if (!workdbMapInspector) return;
   workdbMapInspector.hidden = true;
+  workdbMapInspector.classList.remove("is-anchored");
+  workdbMapInspector.removeAttribute("style");
   if (workdbMapInspectorAction) {
     workdbMapInspectorAction.dataset.recordId = "";
   }
+  scheduleWorkdbGraphDraw();
 }
 
 function openWorkdbRecord(recordId, scroll = false) {
@@ -564,16 +983,22 @@ function openWorkdbRecord(recordId, scroll = false) {
 function syncWorkdbMapSelection(recordId) {
   const index = workdbNodeRecords.findIndex((record) => record?.id === recordId);
   selectedWorkdbNodeIndex = index >= 0 ? index : null;
+  scheduleWorkdbGraphDraw();
 }
 
 function selectWorkdbNode(index) {
-  if (index === null || index === undefined) return;
+  if (index === null || index === undefined) {
+    selectedWorkdbNodeIndex = null;
+    hideWorkdbMapInspector();
+    return;
+  }
   selectedWorkdbNodeIndex = index;
   renderWorkdbMapInspector(index);
   const record = workdbNodeRecords[index];
   if (record) {
     openWorkdbRecord(record.id);
   }
+  scheduleWorkdbGraphDraw();
 }
 
 function moveWorkdbNodeSelection(step) {
@@ -592,26 +1017,120 @@ function moveWorkdbNodeSelection(step) {
   selectWorkdbNode(mappedIndexes[nextPosition]);
 }
 
+function workdbCanvasLocalPoint(clientX, clientY) {
+  const rect = workdbSnapshot.getBoundingClientRect();
+  return {
+    x: clientX - rect.left,
+    y: clientY - rect.top,
+    width: rect.width,
+    height: rect.height
+  };
+}
+
+function workdbPointerList() {
+  return [...workdbGraphPointers.values()];
+}
+
+function workdbPointerCenter(points) {
+  return {
+    x: points.reduce((sum, point) => sum + point.x, 0) / points.length,
+    y: points.reduce((sum, point) => sum + point.y, 0) / points.length
+  };
+}
+
+function workdbPointerDistance(points) {
+  if (points.length < 2) return 1;
+  return Math.max(1, Math.hypot(points[0].x - points[1].x, points[0].y - points[1].y));
+}
+
+function startWorkdbPinch() {
+  const points = workdbPointerList();
+  if (points.length < 2 || !workdbSnapshot) return;
+  const centerClient = workdbPointerCenter(points);
+  const local = workdbCanvasLocalPoint(centerClient.x, centerClient.y);
+  workdbGraphPinch = {
+    distance: workdbPointerDistance(points),
+    centerX: local.x,
+    centerY: local.y,
+    zoom: workdbGraphZoom,
+    panX: workdbGraphPanX,
+    panY: workdbGraphPanY,
+    width: local.width,
+    height: local.height
+  };
+}
+
+function updateWorkdbPinch() {
+  if (!workdbGraphPinch || !workdbSnapshot) return;
+  const points = workdbPointerList();
+  if (points.length < 2) return;
+  const centerClient = workdbPointerCenter(points);
+  const local = workdbCanvasLocalPoint(centerClient.x, centerClient.y);
+  const nextZoom = clampWorkdbZoom(workdbGraphPinch.zoom * (workdbPointerDistance(points) / workdbGraphPinch.distance));
+  const ratio = nextZoom / workdbGraphPinch.zoom;
+  const anchorX = workdbGraphPinch.centerX - workdbGraphPinch.width / 2 - workdbGraphPinch.panX;
+  const anchorY = workdbGraphPinch.centerY - workdbGraphPinch.height / 2 - workdbGraphPinch.panY;
+  workdbGraphPanX = local.x - local.width / 2 - anchorX * ratio;
+  workdbGraphPanY = local.y - local.height / 2 - anchorY * ratio;
+  workdbGraphZoom = nextZoom;
+  workdbGraphUserMoved = true;
+  workdbGraphPreventClick = true;
+  workdbGraphSuppressClickUntil = Date.now() + 450;
+  positionWorkdbMapInspector(selectedWorkdbNodeIndex);
+  scheduleWorkdbGraphDraw();
+}
+
 function bindWorkdbMapEvents() {
   if (!workdbSnapshot || workdbSnapshot.dataset.bound === "true") return;
   workdbSnapshot.dataset.bound = "true";
 
   workdbSnapshot.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0) return;
-    workdbGraphIsPanning = true;
-    workdbGraphPreventClick = false;
-    workdbGraphPointer = {
+    if (event.pointerType === "mouse" && event.button !== 0) return;
+    workdbGraphPointers.set(event.pointerId, {
       id: event.pointerId,
       startX: event.clientX,
       startY: event.clientY,
       x: event.clientX,
       y: event.clientY
-    };
-    workdbSnapshot.setPointerCapture?.(event.pointerId);
+    });
+    if (workdbGraphPointers.size >= 2) {
+      workdbGraphIsPanning = false;
+      workdbGraphPointer = null;
+      startWorkdbPinch();
+    } else {
+      workdbGraphIsPanning = true;
+      workdbGraphPreventClick = false;
+      workdbGraphPointer = {
+        id: event.pointerId,
+        startX: event.clientX,
+        startY: event.clientY,
+        x: event.clientX,
+        y: event.clientY
+      };
+    }
+    try {
+      workdbSnapshot.setPointerCapture?.(event.pointerId);
+    } catch {
+      // Synthetic pointer events in QA do not always register as capturable browser pointers.
+    }
     workdbSnapshot.classList.add("is-panning");
   });
 
   workdbSnapshot.addEventListener("pointermove", (event) => {
+    if (workdbGraphPointers.has(event.pointerId)) {
+      workdbGraphPointers.set(event.pointerId, {
+        id: event.pointerId,
+        startX: workdbGraphPointers.get(event.pointerId).startX,
+        startY: workdbGraphPointers.get(event.pointerId).startY,
+        x: event.clientX,
+        y: event.clientY
+      });
+    }
+    if (workdbGraphPointers.size >= 2) {
+      updateWorkdbPinch();
+      event.preventDefault();
+      return;
+    }
     if (workdbGraphIsPanning && workdbGraphPointer?.id === event.pointerId) {
       const dx = event.clientX - workdbGraphPointer.x;
       const dy = event.clientY - workdbGraphPointer.y;
@@ -626,32 +1145,58 @@ function bindWorkdbMapEvents() {
       workdbGraphPanY += dy;
       workdbGraphPointer.x = event.clientX;
       workdbGraphPointer.y = event.clientY;
+      positionWorkdbMapInspector(selectedWorkdbNodeIndex);
+      scheduleWorkdbGraphDraw();
       event.preventDefault();
       return;
     }
     const index = findWorkdbNodeAt(event.clientX, event.clientY);
-    hoveredWorkdbNodeIndex = index;
+    if (hoveredWorkdbNodeIndex !== index) {
+      hoveredWorkdbNodeIndex = index;
+      scheduleWorkdbGraphDraw();
+    }
     workdbSnapshot.classList.toggle("is-clickable", index !== null);
   });
 
-  workdbSnapshot.addEventListener("pointerup", (event) => {
+  function finishPointer(event) {
+    workdbGraphPointers.delete(event.pointerId);
     if (workdbGraphPointer?.id === event.pointerId) {
       workdbGraphIsPanning = false;
       workdbGraphPointer = null;
-      workdbSnapshot.releasePointerCapture?.(event.pointerId);
-      workdbSnapshot.classList.remove("is-panning");
     }
-  });
+    if (workdbGraphPointers.size >= 2) {
+      startWorkdbPinch();
+    } else {
+      workdbGraphPinch = null;
+      const remaining = workdbPointerList()[0];
+      if (remaining) {
+        workdbGraphPointer = {
+          id: remaining.id,
+          startX: remaining.x,
+          startY: remaining.y,
+          x: remaining.x,
+          y: remaining.y
+        };
+        workdbGraphIsPanning = true;
+      } else {
+        workdbGraphIsPanning = false;
+        workdbSnapshot.classList.remove("is-panning");
+      }
+    }
+    try {
+      workdbSnapshot.releasePointerCapture?.(event.pointerId);
+    } catch {
+      // Matching guard for synthetic pointer events used by visual QA.
+    }
+  }
 
-  workdbSnapshot.addEventListener("pointercancel", () => {
-    workdbGraphIsPanning = false;
-    workdbGraphPointer = null;
-    workdbSnapshot.classList.remove("is-panning");
-  });
+  workdbSnapshot.addEventListener("pointerup", finishPointer);
+  workdbSnapshot.addEventListener("pointercancel", finishPointer);
 
   workdbSnapshot.addEventListener("mouseleave", () => {
     hoveredWorkdbNodeIndex = null;
     workdbSnapshot.classList.remove("is-clickable");
+    scheduleWorkdbGraphDraw();
   });
 
   workdbSnapshot.addEventListener("click", (event) => {
@@ -720,10 +1265,22 @@ function bindWorkdbGraphControls() {
       if (!workdbSnapshot || !workdbSnapshotData) return;
       const rect = workdbSnapshot.getBoundingClientRect();
       const action = button.dataset.workdbGraphAction;
-      if (action === "zoom-out") zoomWorkdbGraphAt(rect.width, rect.height, rect.width / 2, rect.height / 2, 0.78);
-      if (action === "zoom-in") zoomWorkdbGraphAt(rect.width, rect.height, rect.width / 2, rect.height / 2, 1.28);
-      if (action === "fit") fitWorkdbGraph(rect.width, rect.height, workdbSnapshotData, true);
-      if (action === "reset") resetWorkdbGraph(rect.width, rect.height, workdbSnapshotData);
+      if (action === "lens-map" || action === "lens-agent") {
+        workdbGraphLens = action === "lens-agent" ? "agent" : "map";
+        workdbMap?.setAttribute("data-lens", workdbGraphLens);
+        workdbGraphControls.forEach((control) => {
+          const active = control.dataset.workdbGraphAction === `lens-${workdbGraphLens}`;
+          if (control.dataset.workdbGraphAction?.startsWith("lens-")) {
+            control.classList.toggle("is-active", active);
+            control.setAttribute("aria-pressed", String(active));
+          }
+        });
+        if (action === "lens-map") {
+          fitWorkdbGraph(rect.width, rect.height, workdbSnapshotData, true);
+        }
+        if (selectedWorkdbNodeIndex !== null) renderWorkdbMapInspector(selectedWorkdbNodeIndex);
+        scheduleWorkdbGraphDraw();
+      }
       if (action === "expand" && workdbMap) {
         const expanded = !workdbMap.classList.contains("is-expanded");
         workdbMap.classList.toggle("is-expanded", expanded);
@@ -731,8 +1288,19 @@ function bindWorkdbGraphControls() {
         button.textContent = expanded ? "Dock" : "Expand";
         workdbGraphLastSize = null;
         if (!workdbGraphUserMoved) fitWorkdbGraph(rect.width, rect.height, workdbSnapshotData, true);
+        scheduleWorkdbGraphDraw();
       }
     });
+  });
+}
+
+function scheduleWorkdbGraphDraw() {
+  if (!workdbSnapshot || !workdbSnapshotData || workdbGraphFrame) return;
+  workdbGraphFrame = window.requestAnimationFrame(() => {
+    workdbGraphFrame = 0;
+    if (!workdbMap?.hidden) {
+      drawWorkdbSnapshot(workdbSnapshot, workdbSnapshotData, 0);
+    }
   });
 }
 
@@ -741,24 +1309,33 @@ async function startWorkdbSnapshot() {
   workdbSnapshotStarted = true;
   workdbSnapshotData = await loadWorkdbSnapshot();
   workdbNodeRecords = buildWorkdbNodeRecords(workdbSnapshotData);
+  workdbGraphCache = prepareWorkdbGraphCache(workdbSnapshotData);
+  workdbAgentEdges = buildWorkdbAgentEdges();
   syncWorkdbMapSelection(activeItemId);
   if (selectedWorkdbNodeIndex !== null) {
     renderWorkdbMapInspector(selectedWorkdbNodeIndex);
   }
   bindWorkdbMapEvents();
   bindWorkdbGraphControls();
-  if (workdbMapStats) {
-    const counts = workdbSnapshotData.counts || {};
-    workdbMapStats.textContent = `${counts.nodes || workdbSnapshotData.nodes?.length || 0} nodes · ${counts.edges || workdbSnapshotData.edges?.length || 0} links`;
-  }
-  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
-  function frame(timestamp) {
-    if (!workdbMap?.hidden) {
-      drawWorkdbSnapshot(workdbSnapshot, workdbSnapshotData, reduceMotion ? 0 : timestamp);
+  if (!workdbResizeObserver) {
+    if (window.ResizeObserver) {
+      workdbResizeObserver = new ResizeObserver(() => {
+        workdbGraphLastSize = null;
+        scheduleWorkdbGraphDraw();
+      });
+      workdbResizeObserver.observe(workdbSnapshot);
+    } else {
+      window.addEventListener("resize", () => {
+        workdbGraphLastSize = null;
+        scheduleWorkdbGraphDraw();
+      });
+      workdbResizeObserver = { observe() {} };
     }
-    window.requestAnimationFrame(frame);
   }
-  window.requestAnimationFrame(frame);
+  scheduleWorkdbGraphDraw();
+  if (activeView === "workdb") {
+    renderList();
+  }
 }
 
 function renderSummary() {
@@ -936,6 +1513,36 @@ function renderCommandBlock(commands = []) {
   `;
 }
 
+function renderAgentReuseSection(item) {
+  if (!item || !workdbAgentEdges.length) return "";
+  const itemIndex = workdbNodeRecords.findIndex((record) => record?.id === item.id);
+  if (itemIndex < 0) return "";
+  const relations = workdbAgentRelationsForIndex(itemIndex, 4);
+  if (!relations.length) return "";
+  return `
+    <section class="detail-section">
+      <h3>Agent lens</h3>
+      <ul class="agent-reuse-list">
+        ${relations.map((relation) => {
+          const direction = agentRelationDirection(relation);
+          const fromRecord = workdbNodeRecords[direction.fromIndex];
+          const toRecord = workdbNodeRecords[direction.toIndex];
+          const fromTitle = fromRecord ? getItemTitle(fromRecord) : "Reusable context";
+          const toTitle = toRecord ? getItemTitle(toRecord) : "Target context";
+          const via = relation.sharedTags.length ? `via ${relation.sharedTags.join(", ")}` : "via shared cluster";
+          return `
+            <li>
+              <span>${escapeHtml(relation.signalLabel)}</span>
+              <strong>${escapeHtml(fromTitle)} -> ${escapeHtml(toTitle)}</strong>
+              <small>${escapeHtml(via)}</small>
+            </li>
+          `;
+        }).join("")}
+      </ul>
+    </section>
+  `;
+}
+
 function renderDetail(item) {
   if (!item) {
     detailPanel.innerHTML = `<p class="empty-state">Select an item to inspect it.</p>`;
@@ -988,6 +1595,7 @@ function renderDetail(item) {
       <p class="detail-summary">${escapeHtml(item.summary)}</p>
       ${renderTagList(item.tags)}
       ${renderMetricGrid(metrics)}
+      ${renderAgentReuseSection(item)}
       <section class="detail-section">
         <h3>Remote safety boundary</h3>
         <p>${escapeHtml(item.privacyMode || item.provenance || "Remote copy excludes local paths, snippets, file content, and git remotes.")}</p>
@@ -1063,6 +1671,7 @@ function updateViewState() {
   if (workdbMap) {
     workdbMap.hidden = activeView !== "workdb";
   }
+  if (activeView === "workdb") scheduleWorkdbGraphDraw();
 }
 
 document.querySelectorAll(".kb-nav-button").forEach((button) => {
@@ -1091,6 +1700,11 @@ signInButton.addEventListener("click", async () => {
 });
 
 signOutButton.addEventListener("click", async () => {
+  try {
+    window.sessionStorage?.removeItem(knowledgeCacheKey());
+  } catch {
+    // Ignore cache cleanup failures during sign-out.
+  }
   await signOut(auth);
   showGate();
 });

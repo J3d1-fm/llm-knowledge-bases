@@ -46,6 +46,13 @@ if (!appJs.includes("Firestore Work DB context is empty")) {
   failures.push("Authenticated workspace must fail clearly when Firestore workdbContext is empty.");
 }
 
+if (
+  !appJs.includes('doc(db, "vaults", "main", "workdbContext", "summary-workdb")')
+  || appJs.indexOf("const cached = readKnowledgeCache();") < appJs.indexOf('doc(db, "vaults", "main", "workdbContext", "summary-workdb")')
+) {
+  failures.push("Authenticated workspace must verify the live Firestore Work DB summary before using session cache.");
+}
+
 if (appHtml.indexOf('data-view="workdb"') > appHtml.indexOf('data-view="articles"')) {
   failures.push("Work DB navigation must appear before Articles.");
 }
@@ -72,27 +79,47 @@ if (
   || !appJs.includes("renderWorkdbMapInspector(selectedWorkdbNodeIndex)")
   || !appJs.includes('event.key === "ArrowRight"')
   || !appJs.includes('event.key === "ArrowLeft"')
+  || !appJs.includes("workdbGraphPointers")
+  || !appJs.includes("function updateWorkdbPinch")
 ) {
-  failures.push("Work DB graph interactions must reset search, sync the inspector, and support keyboard node navigation.");
+  failures.push("Work DB graph interactions must reset search, sync the inspector, support keyboard node navigation, and handle multitouch gestures.");
 }
 
 if (
-  !appHtml.includes('data-workdb-graph-action="zoom-out"')
-  || !appHtml.includes('data-workdb-graph-action="zoom-in"')
-  || !appHtml.includes('data-workdb-graph-action="fit"')
-  || !appHtml.includes('data-workdb-graph-action="reset"')
+  appHtml.includes('data-workdb-graph-action="zoom-out"')
+  || appHtml.includes('data-workdb-graph-action="zoom-in"')
+  || appHtml.includes('data-workdb-graph-action="fit"')
+  || appHtml.includes('data-workdb-graph-action="reset"')
+  || appHtml.includes('id="workdbZoomState"')
+) {
+  failures.push("Work DB graph must not expose legacy button-based zoom or percentage controls.");
+}
+
+if (
+  !appHtml.includes('data-workdb-graph-action="lens-map"')
+  || !appHtml.includes('data-workdb-graph-action="lens-agent"')
   || !appHtml.includes('data-workdb-graph-action="expand"')
   || !appJs.includes("function zoomWorkdbGraphAt")
   || !appJs.includes("function fitWorkdbGraph")
   || !appJs.includes("function resetWorkdbGraph")
   || !appJs.includes("function bindWorkdbGraphControls")
+  || !appJs.includes("function scheduleWorkdbGraphDraw")
   || !appJs.includes("WORKDB_GRAPH_LOD")
   || !appJs.includes("function visibleWorkdbRenderPoints")
+  || !appJs.includes("function prepareWorkdbGraphCache")
+  || !appJs.includes("function buildWorkdbAgentEdges")
+  || !appJs.includes("function renderAgentReuseSection")
+  || !appJs.includes("KNOWLEDGE_CACHE_TTL_MS")
+  || !appJs.includes("function resetWorkdbGraphRuntime")
+  || !appJs.includes("function publicGraphKey")
+  || !appJs.includes("function workdbRecordGraphKeys")
+  || !appJs.includes("node.k && byNodeKey.has(node.k)")
   || !appJs.includes("workdbVisibleNodes")
   || !styles.includes(".workdb-map-stage")
   || !styles.includes(".workdb-map.is-expanded")
+  || !styles.includes(".agent-reuse-list")
 ) {
-  failures.push("Work DB graph must be a standalone zoomable viewport with LOD rendering controls.");
+  failures.push("Work DB graph must be a standalone touch-first viewport with LOD, agent lens, compact popover, and cached rendering.");
 }
 
 if (
@@ -118,6 +145,10 @@ if (!styles.includes("[hidden]") || !styles.includes("display: none !important")
 
 if (!styles.includes(".workdb-map-inspector") || !styles.includes(".workdb-map-canvas.is-clickable")) {
   failures.push("Stylesheet must expose visible graph inspector and clickable canvas states.");
+}
+
+if (!readFileSync(join(root, "scripts", "build-public-snapshot.mjs"), "utf8").includes("k: publicGraphKey(node.id)")) {
+  failures.push("Public graph snapshot must expose opaque stable node keys for authenticated record mapping.");
 }
 
 const forbiddenAuthGateCopy = [

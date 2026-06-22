@@ -63,12 +63,13 @@ function visibleGraph(zoom) {
     .sort((left, right) => right.importance - left.importance)
     .slice(0, budget.maxNodes);
   const visible = new Set(ranked.map((item) => item.index));
+  const rankedByIndex = new Map(ranked.map((item) => [item.index, item]));
   let visibleEdges = 0;
   for (const edge of edges) {
     if (!visible.has(edge.s) || !visible.has(edge.t)) continue;
     if (visibleEdges >= budget.maxEdges) continue;
-    const source = ranked.find((item) => item.index === edge.s);
-    const target = ranked.find((item) => item.index === edge.t);
+    const source = rankedByIndex.get(edge.s);
+    const target = rankedByIndex.get(edge.t);
     const edgeStrength = Math.min(source?.importance || 0, target?.importance || 0);
     if (zoom < 0.78 && edgeStrength < 86) continue;
     if (zoom < 1.08 && edgeStrength < 70) continue;

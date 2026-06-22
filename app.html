@@ -55,16 +55,13 @@
                 <strong id="workdbMapStats">Loading map</strong>
               </div>
               <div class="workdb-map-toolbar" aria-label="Graph controls">
-                <button class="graph-control" type="button" data-workdb-graph-action="zoom-out" aria-label="Zoom out">-</button>
-                <span class="graph-zoom-state" id="workdbZoomState">100%</span>
-                <button class="graph-control" type="button" data-workdb-graph-action="zoom-in" aria-label="Zoom in">+</button>
-                <button class="graph-control text-control" type="button" data-workdb-graph-action="fit">Fit all</button>
-                <button class="graph-control text-control" type="button" data-workdb-graph-action="reset">1:1</button>
+                <button class="graph-control text-control is-active" type="button" data-workdb-graph-action="lens-map" aria-pressed="true">Map</button>
+                <button class="graph-control text-control" type="button" data-workdb-graph-action="lens-agent" aria-pressed="false">Agent lens</button>
                 <button class="graph-control text-control" type="button" data-workdb-graph-action="expand" aria-pressed="false">Expand</button>
               </div>
             </div>
             <div class="workdb-map-stage">
-              <canvas class="workdb-map-canvas" id="workdbSnapshot" tabindex="0" role="button" aria-label="Interactive Work DB graph. Drag to pan. Use graph controls or mouse wheel to zoom. Use arrow keys to move between records, then press Enter to open."></canvas>
+              <canvas class="workdb-map-canvas" id="workdbSnapshot" tabindex="0" role="button" aria-label="Interactive Work DB graph. Pinch or mouse wheel to zoom, drag to pan, tap a node to inspect it, or use arrow keys to move between records."></canvas>
               <aside class="workdb-map-inspector" id="workdbMapInspector" aria-live="polite" hidden>
                 <p class="eyebrow" id="workdbMapInspectorMeta">Selected node</p>
                 <strong id="workdbMapInspectorTitle">Select a node</strong>

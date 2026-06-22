@@ -17,6 +17,16 @@ function hashNumber(value) {
   return (hash >>> 0) / 4294967295;
 }
 
+function publicGraphKey(value) {
+  let hash = 2166136261;
+  const text = String(value || "");
+  for (let index = 0; index < text.length; index += 1) {
+    hash ^= text.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36).padStart(7, "0");
+}
+
 function radiusFor(node) {
   const weight = Math.max(1, Number(node.weight || 1));
   if (node.type === "memory") return 15;
@@ -60,6 +70,7 @@ const snapshotNodes = graph.nodes.map((node, index) => {
   const isMemory = node.type === "memory";
   return {
     i: index,
+    k: publicGraphKey(node.id),
     t: node.type,
     c: node.color || clusters.find((cluster) => cluster.id === node.cluster)?.color || "#cfcfc9",
     x: Number((isCluster ? center.x : isMemory ? center.x - 0.015 : center.x + Math.cos(angle) * spread).toFixed(4)),

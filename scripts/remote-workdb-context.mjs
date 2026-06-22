@@ -33,8 +33,8 @@ const themeClusters = [
     tags: ["firebase", "firestore", "gcloud", "github", "google", "gmail", "slack", "project-google-accounts"]
   },
   {
-    id: "apps-products",
-    label: "Apps and products",
+    id: "products-apps",
+    label: "Products and apps",
     color: "#d7a7ff",
     tags: ["ios", "web", "piano", "budget", "teleprompter"]
   },

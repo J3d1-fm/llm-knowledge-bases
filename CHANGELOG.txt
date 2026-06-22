@@ -1,5 +1,13 @@
 LLM Knowledge Bases Changelog
 
+Version v0.12.5 - 2026-06-22
+- Replaced the visible zoom button/percentage toolbar with touch-first graph controls: Map, Agent lens, and Expand/Dock.
+- Added multitouch pinch-zoom and drag-pan handling for the signed-in Work DB graph so iPad usage no longer depends on button zoom.
+- Replaced the fixed corner inspector with a compact node-anchored popover that stays inside the graph viewport.
+- Added an agent/LLM lens that draws remote-safe reuse routes between clusters, tags, external systems, and projects, plus detail-panel source -> target reuse rows.
+- Switched the Work DB graph from continuous animation to event-driven canvas rendering with precomputed graph cache, LOD reuse, and short session caching for Firestore workspace data.
+- Added live Firestore summary verification before session cache reuse, full graph runtime reset on sign-out, and opaque stable node keys so authenticated graph records no longer depend on array order.
+
 Version v0.12.4 - 2026-06-22
 - Reworked the signed-in Work DB graph into a standalone graph explorer panel with its own header, toolbar, viewport stage, and expand/dock mode.
 - Added explicit zoom out, zoom in, Fit all, 1:1 reset, mouse-wheel zoom, double-click zoom, and drag-pan controls.
