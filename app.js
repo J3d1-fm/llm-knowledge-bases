@@ -76,8 +76,14 @@ let workdbResizeObserver = null;
 
 const WORKDB_GRAPH_MIN_ZOOM = 0.42;
 const WORKDB_GRAPH_MAX_ZOOM = 6;
-const WORKDB_GRAPH_FIT_PADDING = 48;
-const KNOWLEDGE_CACHE_VERSION = "v0.12.5";
+const WORKDB_GRAPH_FIT_PADDING = 72;
+const WORKDB_GRAPH_WHEEL_DAMPING = 0.00025;
+const WORKDB_GRAPH_WHEEL_MIN_FACTOR = 0.98;
+const WORKDB_GRAPH_WHEEL_MAX_FACTOR = 1.02;
+const WORKDB_GRAPH_KEY_ZOOM_IN = 1.1;
+const WORKDB_GRAPH_KEY_ZOOM_OUT = 0.9;
+const WORKDB_GRAPH_DOUBLE_CLICK_ZOOM = 1.3;
+const KNOWLEDGE_CACHE_VERSION = "v0.13.3";
 const KNOWLEDGE_CACHE_TTL_MS = 4 * 60 * 1000;
 const WORKDB_GRAPH_LOD = [
   { maxNodes: 80, maxEdges: 140, minZoom: 0 },
@@ -468,8 +474,27 @@ function workdbPoint(node, width, height, timestamp) {
   };
 }
 
+function workdbNodeVisualProfile(type) {
+  return {
+    memory: { scale: 0.58, min: 8.5, max: 30, halo: 4.2, alpha: 0.96 },
+    cluster: { scale: 0.54, min: 5.4, max: 18, halo: 3.4, alpha: 0.92 },
+    project: { scale: 0.48, min: 3.8, max: 14, halo: 2.8, alpha: 0.82 },
+    external: { scale: 0.48, min: 3.8, max: 13, halo: 2.8, alpha: 0.82 },
+    repo: { scale: 0.44, min: 3.4, max: 12, halo: 2.4, alpha: 0.76 },
+    cloud: { scale: 0.44, min: 3.4, max: 12, halo: 2.4, alpha: 0.76 },
+    firebase: { scale: 0.44, min: 3.4, max: 12, halo: 2.4, alpha: 0.76 },
+    tag: { scale: 0.42, min: 3.1, max: 11, halo: 2.2, alpha: 0.72 },
+    system: { scale: 0.38, min: 2.8, max: 9, halo: 1.8, alpha: 0.64 },
+    session: { scale: 0.36, min: 2.6, max: 8, halo: 1.6, alpha: 0.58 },
+    raw: { scale: 0.36, min: 2.6, max: 8, halo: 1.6, alpha: 0.58 }
+  }[type] || { scale: 0.36, min: 2.6, max: 8, halo: 1.6, alpha: 0.58 };
+}
+
 function workdbRadius(node) {
-  return Math.max(1.3, node.r * (node.t === "cluster" ? 0.4 : 0.32) * Math.sqrt(workdbGraphZoom));
+  const profile = workdbNodeVisualProfile(node.t);
+  const zoomScale = 0.86 + Math.sqrt(workdbGraphZoom) * 0.22;
+  const radius = Number(node.r || 2) * profile.scale * zoomScale;
+  return clampNumber(Math.max(profile.min, radius), profile.min, profile.max);
 }
 
 function workdbPointNearViewport(point, width, height, padding = 72) {
@@ -499,19 +524,19 @@ function workdbNodeImportance(node, index) {
 function workdbNodeMinZoom(node) {
   if (node.t === "memory" || node.t === "cluster") return 0;
   if (node.t === "project" || node.t === "external" || node.t === "repo" || node.t === "cloud" || node.t === "firebase") {
-    if (node.r >= 10) return 0.62;
-    if (node.r >= 7) return 0.92;
-    return 1.25;
+    if (node.r >= 10) return 0.56;
+    if (node.r >= 7) return 0.82;
+    return 1.15;
   }
   if (node.t === "tag") {
-    if (node.r >= 11) return 0.78;
-    if (node.r >= 8) return 1.08;
-    if (node.r >= 5) return 1.48;
-    return 2.05;
+    if (node.r >= 11) return 0.58;
+    if (node.r >= 8) return 0.88;
+    if (node.r >= 5) return 1.28;
+    return 1.86;
   }
-  if (node.r >= 7) return 1.15;
-  if (node.r >= 4) return 1.62;
-  return 2.3;
+  if (node.r >= 7) return 0.98;
+  if (node.r >= 4) return 1.42;
+  return 2.1;
 }
 
 function workdbLodBudget() {
@@ -622,14 +647,19 @@ function workdbGraphBounds(snapshot) {
   }, { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
 }
 
+function workdbFitPadding(width, height) {
+  return clampNumber(Math.min(width, height) * 0.14, 36, WORKDB_GRAPH_FIT_PADDING);
+}
+
 function fitWorkdbGraph(width, height, snapshot, force = false) {
   if (!snapshot || (!force && workdbGraphHasFit)) return;
   const bounds = workdbGraphBounds(snapshot);
   const baseScale = workdbBaseScale(width, height);
   const boundsWidth = Math.max(0.01, bounds.maxX - bounds.minX);
   const boundsHeight = Math.max(0.01, bounds.maxY - bounds.minY);
-  const availableWidth = Math.max(120, width - WORKDB_GRAPH_FIT_PADDING * 2);
-  const availableHeight = Math.max(120, height - WORKDB_GRAPH_FIT_PADDING * 2);
+  const fitPadding = workdbFitPadding(width, height);
+  const availableWidth = Math.max(120, width - fitPadding * 2);
+  const availableHeight = Math.max(120, height - fitPadding * 2);
   workdbGraphZoom = clampWorkdbZoom(Math.min(
     availableWidth / (boundsWidth * baseScale),
     availableHeight / (boundsHeight * baseScale),
@@ -665,6 +695,16 @@ function zoomWorkdbGraphAt(width, height, canvasX, canvasY, factor) {
   workdbGraphZoom = nextZoom;
   workdbGraphUserMoved = true;
   scheduleWorkdbGraphDraw();
+}
+
+function workdbWheelZoomFactor(event) {
+  const modeScale = event.deltaMode === 1 ? 16 : event.deltaMode === 2 ? Math.max(600, window.innerHeight || 0) : 1;
+  const normalizedDelta = clampNumber(event.deltaY * modeScale, -180, 180);
+  return clampNumber(
+    Math.exp(-normalizedDelta * WORKDB_GRAPH_WHEEL_DAMPING),
+    WORKDB_GRAPH_WHEEL_MIN_FACTOR,
+    WORKDB_GRAPH_WHEEL_MAX_FACTOR
+  );
 }
 
 function visibleWorkdbRenderPoints(nodes, width, height, timestamp) {
@@ -767,6 +807,43 @@ function drawWorkdbAgentEdges(ctx, width, height) {
   return visibleEdgeCount;
 }
 
+function drawWorkdbNode(ctx, item) {
+  const { index, node, point, radius } = item;
+  const isActive = index === selectedWorkdbNodeIndex;
+  const isHovered = index === hoveredWorkdbNodeIndex;
+  const isMapped = Boolean(workdbNodeRecords[index]);
+  const profile = workdbNodeVisualProfile(node.t);
+  const accent = node.c || "#d7d7d2";
+  const baseAlpha = isActive ? 0.98 : isHovered ? 0.92 : workdbGraphLens === "agent" ? Math.max(0.66, profile.alpha - 0.04) : profile.alpha;
+  const haloRadius = radius + profile.halo + (isActive ? 2.2 : isHovered ? 1.4 : 0);
+
+  ctx.fillStyle = accent;
+  ctx.globalAlpha = isActive ? 0.28 : isHovered ? 0.22 : isMapped ? 0.15 : 0.09;
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, haloRadius, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalAlpha = baseAlpha;
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, radius + (isActive ? 1.2 : isHovered ? 0.8 : 0), 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.globalAlpha = isActive ? 0.9 : isHovered ? 0.7 : isMapped ? 0.44 : 0.26;
+  ctx.strokeStyle = isMapped ? "rgba(244, 241, 232, 0.62)" : "rgba(244, 241, 232, 0.32)";
+  ctx.lineWidth = isActive ? 1.8 : isHovered ? 1.35 : Math.max(0.75, Math.min(1.15, radius * 0.18));
+  ctx.beginPath();
+  ctx.arc(point.x, point.y, radius + 0.35, 0, Math.PI * 2);
+  ctx.stroke();
+
+  if (radius >= 4.2) {
+    ctx.globalAlpha = isActive || isHovered ? 0.72 : 0.42;
+    ctx.fillStyle = "rgba(255, 255, 255, 0.78)";
+    ctx.beginPath();
+    ctx.arc(point.x - radius * 0.22, point.y - radius * 0.24, Math.max(1, radius * 0.18), 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
 function drawWorkdbSnapshot(canvas, snapshot, timestamp) {
   const ratio = window.devicePixelRatio || 1;
   const rect = canvas.getBoundingClientRect();
@@ -797,14 +874,7 @@ function drawWorkdbSnapshot(canvas, snapshot, timestamp) {
 
   for (const item of workdbRenderPoints) {
     if (!item.visible) continue;
-    const { index, node, point, radius } = item;
-    const isActive = index === selectedWorkdbNodeIndex;
-    const isHovered = index === hoveredWorkdbNodeIndex;
-    ctx.globalAlpha = isActive ? 0.98 : isHovered ? 0.86 : node.t === "cluster" || node.t === "memory" ? 0.86 : workdbGraphLens === "agent" ? 0.72 : 0.62;
-    ctx.fillStyle = node.c || "#d7d7d2";
-    ctx.beginPath();
-    ctx.arc(point.x, point.y, radius + (isActive ? 1.6 : isHovered ? 1 : 0), 0, Math.PI * 2);
-    ctx.fill();
+    drawWorkdbNode(ctx, item);
   }
 
   for (const item of workdbRenderPoints) {
@@ -1209,13 +1279,13 @@ function bindWorkdbMapEvents() {
 
   workdbSnapshot.addEventListener("dblclick", (event) => {
     const rect = workdbSnapshot.getBoundingClientRect();
-    zoomWorkdbGraphAt(rect.width, rect.height, event.clientX - rect.left, event.clientY - rect.top, 1.55);
+    zoomWorkdbGraphAt(rect.width, rect.height, event.clientX - rect.left, event.clientY - rect.top, WORKDB_GRAPH_DOUBLE_CLICK_ZOOM);
     event.preventDefault();
   });
 
   workdbSnapshot.addEventListener("wheel", (event) => {
     const rect = workdbSnapshot.getBoundingClientRect();
-    const factor = event.deltaY > 0 ? 0.86 : 1.16;
+    const factor = workdbWheelZoomFactor(event);
     zoomWorkdbGraphAt(rect.width, rect.height, event.clientX - rect.left, event.clientY - rect.top, factor);
     event.preventDefault();
   }, { passive: false });
@@ -1239,7 +1309,7 @@ function bindWorkdbMapEvents() {
     }
     if (event.key === "+" || event.key === "=" || event.key === "-") {
       const rect = workdbSnapshot.getBoundingClientRect();
-      zoomWorkdbGraphAt(rect.width, rect.height, rect.width / 2, rect.height / 2, event.key === "-" ? 0.86 : 1.16);
+      zoomWorkdbGraphAt(rect.width, rect.height, rect.width / 2, rect.height / 2, event.key === "-" ? WORKDB_GRAPH_KEY_ZOOM_OUT : WORKDB_GRAPH_KEY_ZOOM_IN);
       event.preventDefault();
       return;
     }

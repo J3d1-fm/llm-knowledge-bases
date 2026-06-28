@@ -7,6 +7,7 @@ const snapshot = JSON.parse(readFileSync(join(root, "assets", "tag-cloud-snapsho
 const nodes = snapshot.nodes || [];
 const edges = snapshot.edges || [];
 const failures = [];
+const maxFitPadding = 72;
 
 const lod = [
   { maxNodes: 80, maxEdges: 140, minZoom: 0 },
@@ -36,23 +37,61 @@ function nodeImportance(node, index) {
 function nodeMinZoom(node) {
   if (node.t === "memory" || node.t === "cluster") return 0;
   if (node.t === "project" || node.t === "external" || node.t === "repo" || node.t === "cloud" || node.t === "firebase") {
-    if (node.r >= 10) return 0.62;
-    if (node.r >= 7) return 0.92;
-    return 1.25;
+    if (node.r >= 10) return 0.56;
+    if (node.r >= 7) return 0.82;
+    return 1.15;
   }
   if (node.t === "tag") {
-    if (node.r >= 11) return 0.78;
-    if (node.r >= 8) return 1.08;
-    if (node.r >= 5) return 1.48;
-    return 2.05;
+    if (node.r >= 11) return 0.58;
+    if (node.r >= 8) return 0.88;
+    if (node.r >= 5) return 1.28;
+    return 1.86;
   }
-  if (node.r >= 7) return 1.15;
-  if (node.r >= 4) return 1.62;
-  return 2.3;
+  if (node.r >= 7) return 0.98;
+  if (node.r >= 4) return 1.42;
+  return 2.1;
 }
 
 function lodBudget(zoom) {
   return lod.slice().reverse().find((level) => zoom >= level.minZoom) || lod[0];
+}
+
+function clampNumber(value, min, max) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function baseScale(width, height) {
+  return Math.min(width, height) * 0.82;
+}
+
+function fitPadding(width, height) {
+  return clampNumber(Math.min(width, height) * 0.14, 36, maxFitPadding);
+}
+
+function graphBounds() {
+  if (!nodes.length) return { minX: -0.5, maxX: 0.5, minY: -0.5, maxY: 0.5 };
+  return nodes.reduce((bounds, node) => {
+    const pad = Math.max(0.018, Number(node.r || 1) / 900);
+    return {
+      minX: Math.min(bounds.minX, node.x - pad),
+      maxX: Math.max(bounds.maxX, node.x + pad),
+      minY: Math.min(bounds.minY, node.y - pad),
+      maxY: Math.max(bounds.maxY, node.y + pad)
+    };
+  }, { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
+}
+
+function fitZoom(width, height) {
+  const bounds = graphBounds();
+  const scale = baseScale(width, height);
+  const padding = fitPadding(width, height);
+  const boundsWidth = Math.max(0.01, bounds.maxX - bounds.minX);
+  const boundsHeight = Math.max(0.01, bounds.maxY - bounds.minY);
+  return clampNumber(Math.min(
+    Math.max(120, width - padding * 2) / (boundsWidth * scale),
+    Math.max(120, height - padding * 2) / (boundsHeight * scale),
+    1.18
+  ), 0.42, 6);
 }
 
 function visibleGraph(zoom) {
@@ -75,12 +114,18 @@ function visibleGraph(zoom) {
     if (zoom < 1.08 && edgeStrength < 70) continue;
     visibleEdges += 1;
   }
-  return { nodes: visible.size, edges: visibleEdges, totalNodes: nodes.length, totalEdges: edges.length };
+  const byType = ranked.reduce((acc, item) => {
+    acc[item.node.t] = (acc[item.node.t] || 0) + 1;
+    return acc;
+  }, {});
+  return { nodes: visible.size, edges: visibleEdges, totalNodes: nodes.length, totalEdges: edges.length, byType };
 }
 
 const far = visibleGraph(0.7);
 const mid = visibleGraph(1.16);
 const near = visibleGraph(6);
+const fittedDesktop = visibleGraph(fitZoom(910, 455));
+const fittedMobile = visibleGraph(fitZoom(320, 360));
 
 if (!nodes.length || !edges.length) {
   failures.push("Graph snapshot must contain nodes and edges.");
@@ -98,9 +143,17 @@ if (!(near.nodes === near.totalNodes)) {
   failures.push(`Near zoom must allow the full graph, got ${near.nodes}/${near.totalNodes}.`);
 }
 
+if (!(fittedDesktop.nodes > 8 && (fittedDesktop.byType.project || fittedDesktop.byType.tag))) {
+  failures.push(`Desktop fitted graph must include major projects/tags, got ${fittedDesktop.nodes} nodes and ${JSON.stringify(fittedDesktop.byType)}.`);
+}
+
+if (!(fittedMobile.nodes > 8 && (fittedMobile.byType.project || fittedMobile.byType.tag))) {
+  failures.push(`Mobile fitted graph must include major projects/tags, got ${fittedMobile.nodes} nodes and ${JSON.stringify(fittedMobile.byType)}.`);
+}
+
 if (failures.length) {
   console.error(failures.join("\n"));
   process.exit(1);
 }
 
-console.log(`Graph LOD validation passed: far ${far.nodes}/${far.totalNodes} nodes, mid ${mid.nodes}, near ${near.nodes}.`);
+console.log(`Graph LOD validation passed: far ${far.nodes}/${far.totalNodes} nodes, mid ${mid.nodes}, near ${near.nodes}, fitted mobile ${fittedMobile.nodes}.`);

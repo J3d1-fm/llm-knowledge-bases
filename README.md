@@ -63,6 +63,10 @@ npm run workdb -- analyze-tag "firebase"
 npm run workdb -- analyze-cluster "cloud-auth"
 npm run workdb -- serve --port 8765
 npm run workdb:cloud -- "Drive Zone" --limit 12
+npm run workdb:cloud -- summary
+npm run workdb:cloud -- diff --limit 20
+npm run workdb:cloud -- list project --limit 20
+npm run workdb:cloud -- checks
 npm run workdb:remote
 ```
 
@@ -88,7 +92,7 @@ The canvas renders a readable overview graph, not all 80k+ files as individual d
 
 Every linked graph endpoint and every rendered bend vertex is marked with a connection dot, including theme-cluster centers. The renderer uses one path vertex array for both line drawing and bend-dot drawing, so a line cannot turn at an unmarked internal vertex.
 
-Use `Fit all` to show the complete clustered graph in the current viewport. The `-` and `+` controls adjust zoom explicitly when a trackpad or mouse wheel is not precise enough.
+Use `Map` to recenter the complete clustered graph in the current viewport. Mouse-wheel and trackpad zoom are intentionally damped so the graph changes scale gradually instead of jumping past the useful level.
 
 When served locally, the graph is a working DB surface, not only a picture:
 
@@ -100,13 +104,27 @@ When served locally, the graph is a working DB surface, not only a picture:
 Codex can use this database as a routing layer before opening full project files:
 
 ```bash
+npm run workdb:cloud -- summary
+npm run workdb:cloud -- diff --limit 20
+npm run workdb:cloud -- list project --limit 20
+npm run workdb:cloud -- search "project or topic" --limit 12
 npm run workdb:cloud -- "project or topic" --limit 12
 npm run workdb -- context "project or topic" --limit 12
 npm run workdb -- search "project or topic" --limit 20 --json
 npm run workdb -- show <graph-id-or-path>
 ```
 
-`npm run workdb:cloud` fetches the live Firestore `workdbContext` collection and returns a remote-safe markdown context pack. It is the remote DB entrypoint for Codex when exact local paths and snippets are not needed. The local `npm run workdb -- context` command remains the deeper private drill-down for source paths, previews, and Finder reveal.
+`npm run workdb:cloud` fetches the live Firestore `workdbContext` collection. With a plain query it returns a remote-safe markdown context pack, preserving the original agent workflow. With explicit subcommands it becomes the live DB operator layer:
+
+- `summary` shows live Firestore freshness, collection counts, Work DB kind counts, public graph snapshot counts, health-check status, top projects, and top tags.
+- `diff` compares live Firestore against the current local remote-safe bundle and shows what would be added, removed, changed, and kept before the next seed.
+- `list <kind>` lists live `summary`, `cluster`, `project`, `tag`, `external`, or `all` records.
+- `search "<query>"` returns compact ranked live matches.
+- `checks` prints live integrity checks.
+
+Add `--json` to any cloud command for automation. `diff --json` uses explicit `localOnly` and `liveOnly` keys so the direction is not ambiguous; it respects `--limit` by default and accepts `--all` when a full machine diff is needed.
+
+The local `npm run workdb -- context` command remains the deeper private drill-down for source paths, previews, and Finder reveal.
 
 The public site does not ship private paths or files. It includes only `assets/tag-cloud-snapshot.json`, a sanitized label-free visual snapshot generated from the private graph.
 
@@ -197,4 +215,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.12.5`
+Current version: `v0.13.3`

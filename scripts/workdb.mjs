@@ -60,6 +60,17 @@ const excludedNames = new Set([
   "worktrees"
 ]);
 
+const excludedNamePatterns = [
+  /^backup[-_]/i,
+  /^archive[-_]/i,
+  /\.backup[-_.]/i,
+  /\.bak$/i
+];
+
+function isExcludedName(name) {
+  return excludedNames.has(name) || excludedNamePatterns.some((pattern) => pattern.test(name));
+}
+
 const readableExtensions = new Set([
   ".css",
   ".html",
@@ -269,7 +280,7 @@ function walkFiles(startPath, options = {}) {
     const name = basename(currentPath);
     if (stats.isDirectory()) {
       if (currentPath === outputRoot || currentPath.startsWith(`${outputRoot}/`)) return;
-      if (excludedNames.has(name)) return;
+      if (isExcludedName(name)) return;
       let entries = [];
       try {
         entries = readdirSync(currentPath).sort();
@@ -291,7 +302,7 @@ function topLevelProjects(projectsRoot) {
   return readdirSync(projectsRoot)
     .sort()
     .map((name) => join(projectsRoot, name))
-    .filter((itemPath) => safeStat(itemPath)?.isDirectory())
+    .filter((itemPath) => safeStat(itemPath)?.isDirectory() && !isExcludedName(basename(itemPath)))
     .map((projectPath) => ({
       id: stableId(projectPath),
       name: basename(projectPath),
@@ -308,12 +319,12 @@ function findGitRepos(startPath) {
     if (depth > 5) return;
     const stats = safeStat(currentPath);
     if (!stats?.isDirectory()) return;
+    const name = basename(currentPath);
+    if (isExcludedName(name)) return;
     if (existsSync(join(currentPath, ".git"))) {
       repos.push(currentPath);
       return;
     }
-    const name = basename(currentPath);
-    if (excludedNames.has(name)) return;
     let entries = [];
     try {
       entries = readdirSync(currentPath).sort();

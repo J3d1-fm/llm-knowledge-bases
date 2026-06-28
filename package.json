@@ -1,6 +1,6 @@
 {
   "name": "llm-knowledge-bases",
-  "version": "0.12.5",
+  "version": "0.13.3",
   "private": true,
   "type": "module",
   "scripts": {
@@ -17,6 +17,10 @@
     "workdb": "node scripts/workdb.mjs",
     "workdb:build": "node scripts/workdb.mjs build",
     "workdb:cloud": "node scripts/cloud-workdb-context.mjs",
+    "workdb:cloud:checks": "node scripts/cloud-workdb-context.mjs checks",
+    "workdb:cloud:diff": "node scripts/cloud-workdb-context.mjs diff",
+    "workdb:cloud:list": "node scripts/cloud-workdb-context.mjs list",
+    "workdb:cloud:summary": "node scripts/cloud-workdb-context.mjs summary",
     "workdb:remote": "node scripts/remote-workdb-context.mjs",
     "workdb:stats": "node scripts/workdb.mjs stats"
   }

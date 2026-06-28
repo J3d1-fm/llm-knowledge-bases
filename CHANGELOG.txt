@@ -1,5 +1,30 @@
 LLM Knowledge Bases Changelog
 
+Version v0.13.3 - 2026-06-28
+- Excluded local backup and archive snapshots from Work DB file, project, and git-repository discovery.
+- Prevented backup folders such as `*.backup-*` from becoming live remote-safe Work DB project cards during Firestore refreshes.
+- Bumped the authenticated workspace cache version so signed-in sessions reload the refreshed Work DB index.
+
+Version v0.13.2 - 2026-06-23
+- Reduced Work DB graph mouse-wheel zoom again for physical mouse wheels: each wheel event is now capped at roughly 2% scale change instead of 6%.
+- Kept keyboard and double-click zoom steps unchanged so intentional zoom commands remain useful.
+- Bumped the authenticated workspace cache version so signed-in sessions reload the slower mouse-wheel zoom behavior.
+
+Version v0.13.1 - 2026-06-23
+- Slowed Work DB graph mouse-wheel and trackpad zoom by normalizing wheel delta and capping each zoom step.
+- Increased visible graph node mass with type-specific minimum radii, halos, outlines, and highlights so small records render as nodes instead of pixel dots.
+- Rebalanced graph LOD thresholds so the first fitted view shows major projects/tags without returning to the noisy all-dot view.
+- Made graph fit padding responsive so desktop has breathing room while narrow mobile canvases still start above the useful project/tag LOD threshold.
+- Bumped the authenticated workspace cache version so signed-in sessions reload the graph interaction fix.
+
+Version v0.13.0 - 2026-06-23
+- Expanded the live Firestore Work DB CLI into an operator layer with `summary`, `list`, `search`, `diff`, and `checks` commands.
+- Added a Firestore-vs-local remote bundle diff so operators can see which Work DB cards would be added, removed, changed, or kept before running `npm run seed:firestore`.
+- Added collection, kind, health-check, public graph snapshot, freshness, and top project/tag reporting to the cloud summary command.
+- Added convenience npm scripts for cloud summary, diff, list, and checks while preserving the existing `npm run workdb:cloud -- "<query>"` context-pack behavior.
+- Hardened cloud CLI JSON mode with stable boolean flag parsing, compact summary output, explicit `localOnly` / `liveOnly` diff directions, `--limit` previews, optional `--all`, and privacy checks for live integrity-check output.
+- Bumped the authenticated workspace cache version so signed-in sessions refresh after the CLI-layer release.
+
 Version v0.12.5 - 2026-06-22
 - Replaced the visible zoom button/percentage toolbar with touch-first graph controls: Map, Agent lens, and Expand/Dock.
 - Added multitouch pinch-zoom and drag-pan handling for the signed-in Work DB graph so iPad usage no longer depends on button zoom.
