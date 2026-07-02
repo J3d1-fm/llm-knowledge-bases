@@ -1,5 +1,11 @@
 LLM Knowledge Bases Changelog
 
+Version v0.13.4 - 2026-07-02
+- Added Obsidian vault project-base records for the cleaned June and early July handover package.
+- Linked the Drive handover folder, final documentation ZIP, and manifest from the vault output index.
+- Added safe routing records for PianoCodexCoach, Personal Codex and Work DB, Drive Zone dashboards, app/product tools, legal pages, Yandex/Cases2win, machine tooling, and explicit safety exclusions.
+- Bumped the authenticated workspace cache version so signed-in sessions reload the project-base output collection.
+
 Version v0.13.3 - 2026-06-28
 - Excluded local backup and archive snapshots from Work DB file, project, and git-repository discovery.
 - Prevented backup folders such as `*.backup-*` from becoming live remote-safe Work DB project cards during Firestore refreshes.

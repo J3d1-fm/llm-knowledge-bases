@@ -1,7 +1,7 @@
 LLM Knowledge Bases Technical Documentation
 
-Version: v0.13.3
-Date: 2026-06-28
+Version: v0.13.4
+Date: 2026-07-02
 
 Purpose
 This repository contains a dependency-free static frontend for presenting the LLM Knowledge Bases product concept, a local markdown vault used as the knowledge source of truth, and an authenticated workspace backed by Firebase Auth and Firestore.
@@ -40,6 +40,7 @@ File Structure
 - vault/wiki/sources/: Source records and source coverage metadata.
 - vault/wiki/checks/: Knowledge integrity checks.
 - vault/outputs/: Reusable markdown reports, deck records, and artifact records.
+- vault/outputs/project-bases/: Handover routing records for useful completed project work.
 - .github/workflows/pages.yml: GitHub Pages deployment workflow.
 - README.md: Operator-facing project summary.
 - CHANGELOG.txt: Version history.
@@ -54,10 +55,12 @@ Vault Authoring Model
 - The seed script deletes existing documents in those five collections before writing the current vault and Work DB snapshots, preventing stale removed pages from staying visible.
 - rawCount, articleCount, sourceCount, outputCount, and wordCount are derived from vault files during seed generation.
 - Vault validation requires every raw markdown file to have a matching source record with the same ID.
+- Project-base records are authored as output markdown files. They provide remote-safe routing to final handover material, Drive package links, GitHub status, and safety exclusions without mirroring raw local folders into Firestore.
 
 Current Content Batch
 - Raw notes cover workflow, Obsidian as IDE, compiled wiki examples, health check examples, generic market notes, RAG vs filesystem notes, agent CLI tooling, output formats, synthetic data and finetuning, and Firebase authenticated workspace notes.
 - Compiled articles cover LLM-owned wiki maintenance, raw-to-compiled vault flow, document ingestion, Obsidian as knowledge IDE, market map, private authenticated workspace, evaluation and health scoring, search and retrieval strategy, output artifact contract, and synthetic data and finetuning.
+- Outputs include the July 2026 handover project bases for PianoCodexCoach, Personal Codex and Work DB, Drive Zone dashboards, app/product tools, legal pages, Yandex/Cases2win, machine tooling, and safety exclusions.
 - The market map is intentionally low confidence until external source-specific competitor imports are added.
 
 Required Article Fields
@@ -239,7 +242,7 @@ The dist artifact includes:
 - assets/
 
 Rollback
-The first releasable state is tagged as v0.1.0 in git. The first deploy-ready state is tagged as v0.1.1. The populated workspace release is tagged as v0.2.0. The markdown-vault source-of-truth release is tagged as v0.3.0. The first expanded content batch is tagged as v0.4.0. The local vault CLI release is tagged as v0.5.0. The private global work DB generator release is tagged as v0.6.0. The work DB safety patch is tagged as v0.6.1. The Hermes-style memory graph and raw/wiki/provenance outputs are tagged as v0.7.0. The clustered graph, hover magnification, and tag/cluster analysis CLI release is tagged as v0.8.0. The graph zoom-fit patch is tagged as v0.8.1. The graph connection-point patch is tagged as v0.8.2. The working DB API, agent context, motion graph, and public snapshot release is tagged as v0.9.0. The graph bend-point visibility patch is tagged as v0.9.1. The authenticated remote Work DB context release is tagged as v0.10.0. The live Firestore Work DB smoke release is tagged as v0.10.1. The graph path-vertex marker hotfix is tagged as v0.10.2. The Work DB-first authenticated workspace release is tagged as v0.11.0. The compact sign-in/security-copy patch is tagged as v0.11.1. The live Firestore cloud context CLI release is tagged as v0.12.0. The signed-in tag cloud visibility fix is tagged as v0.12.1. The Work DB graph scoping patch is tagged as v0.12.2. The interactive Work DB graph patch is tagged as v0.12.3. The standalone zoomable Work DB graph and LOD rendering patch is tagged as v0.12.4. The touch-first agent graph, node popover, and event-driven render patch is intended to be tagged as v0.12.5. The live Work DB operator CLI layer is intended to be tagged as v0.13.0. The Work DB graph zoom and node readability patch is intended to be tagged as v0.13.1. The low-gain mouse-wheel zoom patch is intended to be tagged as v0.13.2. The backup/archive discovery exclusion is intended to be tagged as v0.13.3. A rollback can restore any release tag.
+The first releasable state is tagged as v0.1.0 in git. The first deploy-ready state is tagged as v0.1.1. The populated workspace release is tagged as v0.2.0. The markdown-vault source-of-truth release is tagged as v0.3.0. The first expanded content batch is tagged as v0.4.0. The local vault CLI release is tagged as v0.5.0. The private global work DB generator release is tagged as v0.6.0. The work DB safety patch is tagged as v0.6.1. The Hermes-style memory graph and raw/wiki/provenance outputs are tagged as v0.7.0. The clustered graph, hover magnification, and tag/cluster analysis CLI release is tagged as v0.8.0. The graph zoom-fit patch is tagged as v0.8.1. The graph connection-point patch is tagged as v0.8.2. The working DB API, agent context, motion graph, and public snapshot release is tagged as v0.9.0. The graph bend-point visibility patch is tagged as v0.9.1. The authenticated remote Work DB context release is tagged as v0.10.0. The live Firestore Work DB smoke release is tagged as v0.10.1. The graph path-vertex marker hotfix is tagged as v0.10.2. The Work DB-first authenticated workspace release is tagged as v0.11.0. The compact sign-in/security-copy patch is tagged as v0.11.1. The live Firestore cloud context CLI release is tagged as v0.12.0. The signed-in tag cloud visibility fix is tagged as v0.12.1. The Work DB graph scoping patch is tagged as v0.12.2. The interactive Work DB graph patch is tagged as v0.12.3. The standalone zoomable Work DB graph and LOD rendering patch is tagged as v0.12.4. The touch-first agent graph, node popover, and event-driven render patch is intended to be tagged as v0.12.5. The live Work DB operator CLI layer is intended to be tagged as v0.13.0. The Work DB graph zoom and node readability patch is intended to be tagged as v0.13.1. The low-gain mouse-wheel zoom patch is intended to be tagged as v0.13.2. The backup/archive discovery exclusion is intended to be tagged as v0.13.3. The handover project-base output release is intended to be tagged as v0.13.4. A rollback can restore any release tag.
 
 Validation
 Run:

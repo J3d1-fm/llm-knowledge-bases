@@ -4,5 +4,5 @@ dist/
 .firebase/
 coverage/
 work/
-outputs/
+/outputs/
 *.log

@@ -9,6 +9,7 @@ The project now has a local markdown vault as the source of truth:
 - `vault/wiki/sources/` stores source records and coverage links
 - `vault/wiki/checks/` stores integrity checks
 - `vault/outputs/` stores reusable reports, decks, and artifact records
+- `vault/outputs/project-bases/` stores handover routing records for useful completed project work
 
 Firestore is a deploy target generated from the vault, not the authoring surface.
 
@@ -126,6 +127,12 @@ Add `--json` to any cloud command for automation. `diff --json` uses explicit `l
 
 The local `npm run workdb -- context` command remains the deeper private drill-down for source paths, previews, and Finder reveal.
 
+## Project Bases
+
+The July 2026 handover project bases are stored under `vault/outputs/project-bases/` and seeded into Firestore as output records. They summarize final useful work, Drive handover links, GitHub push status, source document paths inside the handover ZIP, and explicit no-upload/no-push exclusions.
+
+These records intentionally avoid mirroring raw local folders. Use them as routing cards, then inspect the current repository or live account state before acting.
+
 The public site does not ship private paths or files. It includes only `assets/tag-cloud-snapshot.json`, a sanitized label-free visual snapshot generated from the private graph.
 
 The authenticated Firebase workspace can load a remote-safe Work DB context collection from Firestore. This is not a full raw file mirror. It contains project, cluster, tag, external-inventory, and summary cards with counts and local Codex follow-up commands. Use the local CLI for exact paths, previews, and source inspection.
@@ -215,4 +222,4 @@ Legacy deploy target: GitHub Pages workflow still exists, but it should be treat
 
 ## Version
 
-Current version: `v0.13.3`
+Current version: `v0.13.4`
